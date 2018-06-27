@@ -7,6 +7,7 @@
 
 var gulp = require('gulp');
 var tape = require('gulp-tape');
+let mocha = require('gulp-mocha');
 var tapColorize = require('tap-colorize');
 var addsrc = require('gulp-add-src');
 
@@ -19,7 +20,7 @@ var testConstants = require('../../test/unit/constants.js');
 
 // by default for running the tests print debug to a file
 var debugPath = path.join(testConstants.tempdir, 'test-log/debug.log');
-process.env.HFC_LOGGING = util.format('{"debug":"%s"}', escapeWindowsPath(debugPath));
+//process.env.HFC_LOGGING = util.format('{"debug":"%s"}', escapeWindowsPath(debugPath));
 
 function escapeWindowsPath(p) {
 	if (path.sep == '/') return p;
@@ -106,14 +107,26 @@ gulp.task('compile', shell.task([
 // Use nyc instead of gulp-istanbul to generate coverage report
 // Cannot use gulp-istabul because it throws "unexpected identifier" for async/await functions
 gulp.task('test', shell.task(
-	'./node_modules/nyc/bin/nyc.js gulp run-test'
+	'./node_modules/nyc/bin/nyc.js gulp run-all-tests'
 ));
 
 gulp.task('test-headless', shell.task(
 	'./node_modules/nyc/bin/nyc.js gulp run-test-headless'
 ));
 
-gulp.task('run-test', ['clean-up', 'lint', 'pre-test', 'compile', 'docker-ready', 'ca'], function() {
+gulp.task('run-all-tests', ['fabric-network-unit-tests', 'run-test']);
+
+gulp.task('fabric-network-unit-tests', () => {
+	return gulp.src(['fabric-network/test/*'], { read: false })
+		.pipe(mocha({
+			reporter: 'spec'//,
+			//globals: {
+			//	chai: require('chai')
+			//}
+		}));
+});
+
+gulp.task('run-test', ['clean-up', 'pre-test', 'compile', 'docker-ready', 'ca'], function() {
 	// use individual tests to control the sequence they get executed
 	// first run the ca-tests that tests all the member registration
 	// and enrollment scenarios (good and bad calls). Then the rest

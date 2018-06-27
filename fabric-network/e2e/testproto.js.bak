@@ -1,0 +1,84 @@
+'use strict';
+
+const Network = require('../lib/network');
+const FileSystemWallet = require('../lib/filesystemwallet');
+const CouchDBWallet = require('../lib/couchdbwallet');
+const uuid = require('uuid');
+
+const fs = require('fs');
+
+
+// requires basic-sample-network installed.
+// composer network install -a ./test/basic-sample-network.bna -c PeerAdmin@hlfv1
+// composer network start -n basic-sample-network -V 0.2.4 -c PeerAdmin@hlfv1 -A dave -C ./test/dave/cert.pem
+
+const participant = {
+    "$class": "org.example.basic.SampleParticipant",
+    "participantId": "4979",
+    "firstName": "",
+    "lastName": ""
+};
+
+const asset = {
+        "$class": "org.example.basic.SampleAsset",
+        "assetId": "2049",
+        "owner": "resource:org.example.basic.SampleParticipant#7695",
+        "value": ""  
+}
+
+const activate = {
+    $class: 'org.hyperledger.composer.system.ActivateCurrentIdentity',
+    timestamp: new Date().toISOString()
+};
+
+
+const assetId = Math.floor(Math.random() * Math.floor(999999));
+const txId1 = uuid.v4();
+const txId2 = uuid.v4();
+
+const addP = `{"$class":"org.hyperledger.composer.system.AddParticipant","resources":[{"$class":"org.example.basic.SampleParticipant","participantId":"P${assetId}","firstName":"Jack","lastName":"Daniels"}],"targetRegistry":"resource:org.hyperledger.composer.system.ParticipantRegistry#org.example.basic.SampleParticipant","transactionId":"${txId1}","timestamp":"2018-06-14T09:09:44.570Z"}`;
+
+const addA = `{"$class":"org.hyperledger.composer.system.AddAsset","resources":[{"$class":"org.example.basic.SampleAsset","assetId":"A${assetId}", "owner": "resource:org.example.basic.SampleParticipant#P2", "value":"10"}],"targetRegistry":"resource:org.hyperledger.composer.system.AssetRegistry#org.example.basic.SampleAsset","transactionId":"${txId2}","timestamp":"2018-06-14T09:09:44.570Z"}`;
+
+(async () => {
+    // Perform some identity management first
+    //const wallet = new FileSystemWallet('/home/vagrant/.wallet');
+    const wallet = new CouchDBWallet({url: 'http://localhost:5984'});
+    const exists = await wallet.exists('dave');
+    if (!exists) {
+        const cert = fs.readFileSync('./test/dave/cert.pem').toString();
+        const key = fs.readFileSync('./test/dave/key.pem').toString();
+        await wallet.import('dave', 'Org1MSP', cert, key);
+    }
+
+    // now we are ready to interact with the network
+    const network = new Network();
+    // maybe network could also read the file directly
+    const buffer = fs.readFileSync('./test/ccp.json');
+
+    try {
+        //TODO: should an app provide a wallet implementation or a URI string which represents an implementation to be
+        // loaded by the network class.
+        await network.initialize(JSON.parse(buffer.toString()), {
+            wallet: wallet,
+            identity: 'dave'
+        });
+            
+
+        // activation works but throws an error to say the identity needs to be activated :-)
+        try {
+            await network.submitTransaction('composerchannel', 'basic-sample-network', 'submitTransaction', [JSON.stringify(activate)]);
+        } catch(error) {
+        
+        }
+        await network.submitTransaction('composerchannel', 'basic-sample-network', 'submitTransaction', [addP]);
+        await network.submitTransaction('composerchannel', 'basic-sample-network', 'submitTransaction', [addA]);
+    } catch(error) {
+        console.log(error);
+    } finally {
+        network.disconnect();
+    }
+
+
+})();
+
