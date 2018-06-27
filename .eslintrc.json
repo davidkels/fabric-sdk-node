@@ -1,8 +1,8 @@
 {
 	"env": {
 		"es6": true,
-        "node": true,
-        "mocha": true
+		"node": true,
+		"mocha": true
 	},
 	"extends": "eslint:recommended",
 	"parserOptions": {
@@ -27,7 +27,12 @@
 			}
 		],
 		"no-console": "warn",
-		"no-unused-vars": "warn",
+		"no-unused-vars": [
+			"error",
+			{
+			  "args": "none"
+			}
+		],
 		"no-mixed-spaces-and-tabs": "warn",
 		"prefer-const": "warn",
 		"no-var": "warn",

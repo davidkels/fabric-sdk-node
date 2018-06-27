@@ -2,9 +2,12 @@
 # SPDX-License-Identifier: Apache-2.0
 coverage
 docs/gen
+WALLETS
+**/node_modules/*
 node_modules/*
 fabric-client/node_modules/*
 fabric-ca-client/node_modules/*
+fabric-network/node_modules/*
 fabric-ca-client/lib/api.js
 fabric-ca-client/lib/utils.js
 fabric-ca-client/lib/BaseClient.js
@@ -35,3 +38,4 @@ test/typescript/**/*.js.map
 yarn.lock
 test/fixtures/src/node_cc/example_cc/.npmrc
 test/fixtures/src/node_cc/example_cc1/.npmrc
+.editorconfig

@@ -1,0 +1,164 @@
+/*
+ Copyright 2018 IBM All Rights Reserved.
+
+ Licensed under the Apache License, Version 2.0 (the "License");
+ you may not use this file except in compliance with the License.
+ You may obtain a copy of the License at
+
+		http://www.apache.org/licenses/LICENSE-2.0
+
+ Unless required by applicable law or agreed to in writing, software
+ distributed under the License is distributed on an "AS IS" BASIS,
+ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ See the License for the specific language governing permissions and
+ limitations under the License.
+*/
+'use strict';
+
+const {EventHandlerFactory} = require('../../api/eventhandler');
+const DefaultTxEventHandler = require('./defaulttxeventhandler');
+const EventHandlerConstants = require('./defaulteventstrategies');
+
+
+// Strategy definitions:
+// S1 - Listen for all on your org (add all event hubs for that org, wait for all that are still connected, minimum 1) - DEFAULT
+// S2 - Listen for any on your org (add all event hubs for that org, wait for first 1)
+// S3 - Listen for all peers in the channel (add all event hubs, wait for all, wait for all that are connected, minimum 1 from each org)
+// S4 - Listen for any peers in the channel  (add all event hubs, wait for first 1)
+
+// ---- COMPLEX strategies -----
+// - Listen for any org peer for all orgs in the channel (add all events hubs, wait for 1 from each org)
+
+// - Listen for all leader peers in the channel (if you can determine the leader peers)
+// - Listen for any leader peer in the channel (if you can determine the leader peers)
+
+class DefaultEventHandlerFactory extends EventHandlerFactory {
+
+	constructor(channel, mspId, peerMap, options) {
+		super(channel, mspId, peerMap, options || {});
+
+		if (!this.options.timeout) {
+			this.options.timeout = 60;
+		}
+
+		this.strategyMap = new Map([
+			[EventHandlerConstants.ALL_IN_MSPID, this._connectEventHubsForMspid],
+			[EventHandlerConstants.ANY_IN_MSPID, this._connectEventHubsForMspid],
+			[EventHandlerConstants.ALL_IN_CHANNEL, this._connectAllEventHubs],
+			[EventHandlerConstants.ANY_IN_CHANNEL, this._connectAllEventHubs]
+		]);
+
+		if (!this.options.strategy) {
+			this.options.strategy = EventHandlerConstants.ALL_IN_MSPID;
+		}
+
+		if (!this.strategyMap.has(this.options.strategy)) {
+			throw new Error('unknown event handling strategy: ' + this.options.strategy);
+		}
+	}
+
+	async initialize() {
+		if (!this.initialized) {
+			console.log('connecting to event hubs');
+			if (this.useFull === undefined || this.useFull === null) {
+				this.useFull = false;
+			}
+			const connectStrategy = this.strategyMap.get(this.options.strategy);
+			await connectStrategy.call(this, this.mspId);
+			if (this.getEventHubs().length === 0) {
+				throw new Error('No available event hubs found for strategy');
+			}
+
+			this.initialized = true;
+		}
+	}
+
+
+	//TODO: These methods could go into the superclass maybe ?
+	/**
+	 * Set up the event hubs for peers of a specific mspId and put the
+	 * promises of each into the supplied array
+	 *
+	 * @param {*} mspId
+	 * @param {*} connectPromises
+	 * @memberof DefaultEventHandlerFactory
+	 */
+	_setupEventHubsForMspid(mspId, connectPromises) {
+		const orgPeers = this.peerMap.get(mspId);
+		if (orgPeers.length > 0) {
+			for (const orgPeer of orgPeers) {
+				let eventHub = this.channel.newChannelEventHub(orgPeer);
+				eventHub._EVH_mspId = mspId;  // insert the mspId into the object
+				this.addEventHub(eventHub);
+				let connectPromise = new Promise((resolve, reject) => {
+					const regId = eventHub.registerBlockEvent(
+						(block) => {
+							console.log(new Date(), 'got block event');
+							eventHub.unregisterBlockEvent(regId);
+							resolve();
+						},
+						(err) => {
+							console.log(new Date(), 'got error', err);
+							eventHub.unregisterBlockEvent(regId);
+							resolve();
+						}
+					);
+				});
+				connectPromises.push(connectPromise);
+
+				//TODO: need to control filtered vs full somehow, users may not want full block retrieval
+				eventHub.connect(this.useFull);
+			}
+		}
+	}
+
+	/**
+	 * set up the event hubs for peers of the specified mspid and wait for them to
+	 * either connect successfully or fail
+	 *
+	 * @param {*} mspId
+	 * @memberof DefaultEventHandlerFactory
+	 */
+	async _connectEventHubsForMspid(mspId) {
+		let connectPromises = [];
+		this._setupEventHubsForMspid(mspId, connectPromises);
+		if (connectPromises.length > 0) {
+			console.log('waiting for mspid event hubs to connect or fail to connect', connectPromises);
+			await Promise.all(connectPromises);
+		}
+	}
+
+	/**
+	 * set up the event hubs for all the peers and wait for them to
+	 * either connect successfully or fail
+	 *
+	 * @param {*} mspId
+	 * @memberof DefaultEventHandlerFactory
+	 */
+	async _connectAllEventHubs(mspId) {
+		console.log('in _connectAllEventHubs');
+		let connectPromises = [];
+		for (const mspId of this.peerMap.keys()) {
+			this._setupEventHubsForMspid(mspId, connectPromises);
+		}
+		if (connectPromises.length > 0) {
+			console.log('waiting for all event hubs to connect or fail to connect', connectPromises);
+			await Promise.all(connectPromises);
+		}
+	}
+
+	/**
+	 * create an Tx Event handler for the specific txid
+	 *
+	 * @param {*} txid
+	 * @returns
+	 * @memberof DefaultEventHandlerFactory
+	 */
+	createTxEventHandler(txid) {
+		// pass in all available eventHubs to listen on, the handler decides when to resolve based on strategy
+		// a TxEventHandler should check that the available ones are usable when appropriate.
+		return new DefaultTxEventHandler(this.getEventHubs(), this.options.strategy, this.mspId, txid, this.options.timeout);
+	}
+}
+
+module.exports = DefaultEventHandlerFactory;
