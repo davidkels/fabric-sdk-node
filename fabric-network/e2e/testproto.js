@@ -10,7 +10,7 @@ const fs = require('fs');
 
 (async () => {
 	// Perform some identity management first
-	const wallet = new FileSystemWallet('/home/vagrant/.wallet');
+	const wallet = new FileSystemWallet('$HOME/.wallet');
 	//const wallet = new CouchDBWallet({url: 'http://localhost:5984'});
 	const exists = await wallet.exists('dave');
 	if (!exists) {
@@ -34,7 +34,8 @@ const fs = require('fs');
 
 
 		try {
-			let response = await network.submitTransaction('composerchannel', 'demo', '', ['key1', 'key2', 50]);
+			const contract = await network.getContract('composerchannel', 'demo');
+			let response = await contract.submitTransaction('', ['key1', 'key2', '50']);
 			console.log('got response: ' + response);
 		} catch(error) {
 			console.log('got error', error);
