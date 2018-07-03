@@ -14,15 +14,15 @@ const fs = require('fs');
 	//const wallet = new CouchDBWallet({url: 'http://localhost:5984'});
 	const exists = await wallet.exists('dave');
 	if (!exists) {
-		const cert = fs.readFileSync('./e2e/dave/cert.pem').toString();
-		const key = fs.readFileSync('./e2e/dave/key.pem').toString();
+		const cert = fs.readFileSync('./dave/cert.pem').toString();
+		const key = fs.readFileSync('./dave/key.pem').toString();
 		await wallet.import('dave', 'Org1MSP', cert, key);
 	}
 
 	// now we are ready to interact with the network
 	const network = new Network();
 	// maybe network could also read the file directly
-	const buffer = fs.readFileSync('./e2e/ccp.json');
+	const buffer = fs.readFileSync('./ccp.json');
 
 	try {
 		//TODO: should an app provide a wallet implementation or a URI string which represents an implementation to be

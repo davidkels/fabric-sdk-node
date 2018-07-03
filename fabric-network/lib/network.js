@@ -191,9 +191,7 @@ class Network {
 	async disconnect() {
 		for (let channelName in this.channelStatus) {
 			let channelDef = this.channelStatus[channelName];
-			if (channelDef.eventHubs[0].isconnected()) {
-				channelDef.eventHubs[0].disconnect();
-			}
+			channelDef.eventHubs[0].disconnect();
 		}
 	}
 
@@ -223,18 +221,6 @@ class Network {
 			fcn: transactionName,
 			args: parameters
 		};
-		console.log('sendTxProposal');
-		// node-sdk bug
-		// the following can throw an error
-		/*
-got error TypeError: "value" argument must not be a number
-    at Function.Buffer.from (buffer.js:186:11)
-    at Function._buildSignedProposal (/home/vagrant/src/go/src/github.com/hyperledger/fabric-sdk-node/fabric-client/lib/Channel.js:2335:21)
-    at Channel.sendTransactionProposal (/home/vagrant/src/go/src/github.com/hyperledger/fabric-sdk-node/fabric-client/lib/Channel.js:2265:29)
-    at Network.submitTransaction (/home/vagrant/src/go/src/github.com/hyperledger/fabric-sdk-node/fabric-network/lib/network.js:226:33)
-	at <anonymous>
-	*/
-		// and then the application hangs
 
 		const results = await channel.sendTransactionProposal(request); // node sdk will target all peers on the channel that are endorsingPeer
 
