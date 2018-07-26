@@ -91,7 +91,7 @@ class Wallet  {
 
 	}
 
-	async import(label, mspId, certificate, privateKey) {
+	async import(label, mspId, certificate, privateKey = null) {
 
 		// this changes the user context of the client
 		label = this.normalizeLabel(label);

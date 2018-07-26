@@ -19,19 +19,6 @@ const {EventHandlerFactory} = require('../../api/eventhandler');
 const DefaultTxEventHandler = require('./defaulttxeventhandler');
 const EventHandlerConstants = require('./defaulteventstrategies');
 
-
-// Strategy definitions:
-// S1 - Listen for all on your org (add all event hubs for that org, wait for all that are still connected, minimum 1) - DEFAULT
-// S2 - Listen for any on your org (add all event hubs for that org, wait for first 1)
-// S3 - Listen for all peers in the channel (add all event hubs, wait for all, wait for all that are connected, minimum 1 from each org)
-// S4 - Listen for any peers in the channel  (add all event hubs, wait for first 1)
-
-// ---- COMPLEX strategies -----
-// - Listen for any org peer for all orgs in the channel (add all events hubs, wait for 1 from each org)
-
-// - Listen for all leader peers in the channel (if you can determine the leader peers)
-// - Listen for any leader peer in the channel (if you can determine the leader peers)
-
 class DefaultEventHandlerFactory extends EventHandlerFactory {
 
 	constructor(channel, mspId, peerMap, options) {
@@ -42,14 +29,14 @@ class DefaultEventHandlerFactory extends EventHandlerFactory {
 		}
 
 		this.strategyMap = new Map([
-			[EventHandlerConstants.ALL_IN_MSPID, this._connectEventHubsForMspid],
-			[EventHandlerConstants.ANY_IN_MSPID, this._connectEventHubsForMspid],
-			[EventHandlerConstants.ALL_IN_CHANNEL, this._connectAllEventHubs],
-			[EventHandlerConstants.ANY_IN_CHANNEL, this._connectAllEventHubs]
+			[EventHandlerConstants.MSPID_SCOPE_ALLFORTX, this._connectEventHubsForMspid],
+			[EventHandlerConstants.MSPID_SCOPE_ANYFORTX, this._connectEventHubsForMspid],
+			[EventHandlerConstants.CHANNEL_SCOPE_ALLFORTX, this._connectAllEventHubs],
+			[EventHandlerConstants.CHANNEL_SCOPE_ANYFORTX, this._connectAllEventHubs]
 		]);
 
 		if (!this.options.strategy) {
-			this.options.strategy = EventHandlerConstants.ALL_IN_MSPID;
+			this.options.strategy = EventHandlerConstants.MSPID_SCOPE_ALLFORTX;
 		}
 
 		if (!this.strategyMap.has(this.options.strategy)) {
@@ -61,7 +48,7 @@ class DefaultEventHandlerFactory extends EventHandlerFactory {
 		if (!this.initialized) {
 			console.log('connecting to event hubs');
 			if (this.useFull === undefined || this.useFull === null) {
-				this.useFull = false;
+				this.useFull = true;
 			}
 			const connectStrategy = this.strategyMap.get(this.options.strategy);
 			await connectStrategy.call(this, this.mspId);
@@ -157,7 +144,7 @@ class DefaultEventHandlerFactory extends EventHandlerFactory {
 	createTxEventHandler(txid) {
 		// pass in all available eventHubs to listen on, the handler decides when to resolve based on strategy
 		// a TxEventHandler should check that the available ones are usable when appropriate.
-		return new DefaultTxEventHandler(this.getEventHubs(), this.options.strategy, this.mspId, txid, this.options.timeout);
+		return new DefaultTxEventHandler(this.getEventHubs(), this.mspId, txid, this.options);
 	}
 }
 

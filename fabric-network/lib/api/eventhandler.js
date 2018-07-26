@@ -32,6 +32,7 @@ class EventHandlerFactory {
 
 		// available event hubs, not necessarily connected event hubs, just ones that
 		// are available to be tried
+		//TODO: how should this be stored and returned for end users to use.
 		this.availableEventHubs = [];
 	}
 
@@ -50,7 +51,7 @@ class EventHandlerFactory {
 	/**
      * check the status of the event hubs and attempt to reconnect any event hubs.
      */
-	checkEventhubs() {
+	checkEventHubs() {
 		for(const hub of this.availableEventHubs) {
 			hub.checkConnection(true);
 		}
@@ -79,7 +80,7 @@ class EventHandlerFactory {
 	}
 
 	//TODO: what should we do here ?
-	getBlockEventHandler() {
+	createBlockEventHandler() {
 		throw new Error('not implemented');
 	}
 }
@@ -93,15 +94,14 @@ class TxEventHandler {
      * @param {String} txId the txid that is driving the events to occur
      * @param {Integer} timeout how long (in seconds) to wait for events to occur.
      */
-	constructor(eventHubs, strategy, mspId, txId, timeout) {
+	constructor(eventHubs, mspId, txId, options) {
 		if (!eventHubs || eventHubs.length === 0) {
 			throw new Error('No event hubs defined');
 		}
 		this.eventHubs = eventHubs;
-		this.strategy = strategy;
 		this.txId = txId || '';
 		this.mspId = mspId;
-		this.timeout = (timeout || 0) * 1000;
+		this.options = options;
 
 		this.notificationPromise;
 		this.timeoutHandle;

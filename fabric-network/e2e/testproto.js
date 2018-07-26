@@ -112,10 +112,26 @@ const fs = require('fs');
 		}
 
 		try {
+			let contract;
+			let response;
+			let blockToQuery;
+
 			console.log('testing network with file system identity:');
-			let contract = await network.getContract('composerchannel', 'demo');
-			let response = await contract.submitTransaction('invoke', ['key1', 'key2', '50']);
-			console.log('got response: ' + response);
+			contract = await network.getContract('composerchannel', 'demo');
+			let eventHubs = network.getEventHubs('composerchannel');
+
+			eventHubs[0].registerBlockEvent((block) => {  //TODO: Note that eventHubs have a special field defining which mspId they are in.
+				console.log('block---->');
+				console.log(block);
+				blockToQuery = block.header.number;
+			});
+			response = await contract.submitTransaction('invoke', ['key1', 'key2', '50']);
+			console.log('got response 1: ' + response);
+			let channel = network.getClient().getChannel();
+			let blk = await channel.queryBlock(blockToQuery * 1);
+			console.log('blk--->');
+			console.log(JSON.stringify(blk.data.data[0].payload.data.actions));
+
 
 			console.log('testing query only network with file system identity:');
 			contract = await queryNetwork.getContract('composerchannel', 'demo');

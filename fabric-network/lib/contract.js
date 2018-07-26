@@ -49,9 +49,9 @@ class Contract extends EventEmitter {
 			throw new Error('No results were returned from the request');
 		}
 
-		let validResponses = [];
-		let invalidResponseMsgs = [];
-		let ignoredErrors = 0;
+		const validResponses = [];
+		const invalidResponseMsgs = [];
+		const ignoredErrors = 0;
 
 		responses.forEach((responseContent) => {
 			if (responseContent instanceof Error) {
@@ -144,7 +144,7 @@ class Contract extends EventEmitter {
 		}
 
 		console.log('waiting for events');
-		if (this.eventHandler) {
+		if (eventHandler) {
 			await eventHandler.waitForEvents();
 		}
 		console.log('got events');

@@ -44,29 +44,29 @@ class DefaultTxEventHandler extends TxEventHandler {
      * @param {String} txId the txid that is driving the events to occur
      * @param {Integer} timeout how long (in seconds) to wait for events to occur.
      */
-	constructor(eventHubs, strategy, mspId, txId, timeout) {
-		super(eventHubs, strategy, mspId, txId, timeout);
+	constructor(eventHubs, mspId, txId, options) {
+		super(eventHubs, mspId, txId, options);
 		this.notificationPromise = null;
 		this.timeoutHandle = null;
 
 		// build the strategy map
 		this.strategyMap = new Map([
-			[EventHandlerConstants.ALL_IN_MSPID, {
+			[EventHandlerConstants.MSPID_SCOPE_ALLFORTX, {
 				checkInitialState: this._checkInitialCountByMspId,
 				eventReceived: this._checkRemainingEventsForMspId,
 				errorReceived: this._checkRemainingEventsForMspId
 			}],
-			[EventHandlerConstants.ANY_IN_MSPID, {
+			[EventHandlerConstants.MSPID_SCOPE_ANYFORTX, {
 				checkInitialState: this._checkInitialCountByMspId,
 				eventReceived: () => { return STRATEGY_PASSED;},
 				errorReceived: this._checkRemainingEventsForMspId
 			}],
-			[EventHandlerConstants.ALL_IN_CHANNEL, {
+			[EventHandlerConstants.CHANNEL_SCOPE_ALLFORTX, {
 				checkInitialState: this._checkInitialCountByMspId,
 				eventReceived: this._checkEachMspIdForEvents,
 				errorReceived: this._checkEachMspIdForEvents
 			}],
-			[EventHandlerConstants.ANY_IN_CHANNEL, {
+			[EventHandlerConstants.CHANNEL_SCOPE_ANYFORTX, {
 				checkInitialState: this._checkInitialCountTotal,
 				eventReceived: () => { return STRATEGY_PASSED;},
 				errorReceived: this._checkRemainingEventsForAll
@@ -216,7 +216,7 @@ class DefaultTxEventHandler extends TxEventHandler {
 			}
 		}
 
-		const connectStrategy = this.strategyMap.get(this.strategy);
+		const connectStrategy = this.strategyMap.get(this.options.strategy);
 		connectStrategy.checkInitialState.call(this);
 
 		return connectedHubs;
@@ -230,7 +230,7 @@ class DefaultTxEventHandler extends TxEventHandler {
 		}
 		this.eventCount.set(mspId, count);
 
-		const connectStrategy = this.strategyMap.get(this.strategy);
+		const connectStrategy = this.strategyMap.get(this.options.strategy);
 		if (!errorReceived) {
 			return connectStrategy.eventReceived.call(this, mspId, count);
 		} else {
@@ -261,7 +261,7 @@ class DefaultTxEventHandler extends TxEventHandler {
 		this.timeoutHandle = setTimeout(() => {
 			this.cancelListening();
 			txReject(new Error('Event strategy not satisified within the timeout period'));
-		}, this.timeout);
+		}, this.options.timeout);
 
 		for (const hub of this.connectedHubs) {
 			console.log('registering for event');

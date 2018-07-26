@@ -30,8 +30,9 @@ class Network {
 		this.options = {
 			commitTimeout: 300 * 1000,
 			eventHandlerFactory: './impl/event/defaulteventhandlerfactory',
+			// not appropriate options if not the above impl
 			eventHandlerOptions: {
-				strategy: EventHandlerConstants.ALL_IN_MSPID,
+				strategy: EventHandlerConstants.MSPID_SCOPE_ALLFORTX,
 				timeout: 60
 			},
 			queryHandler: './impl/query/defaultqueryhandler',
@@ -158,7 +159,7 @@ class Network {
 	 * @memberof Network
 	 */
 	getEventHubs(channelName) {
-		if (this.channelStatus[channelName].eventHandlerFactory) {
+		if (this.channelStatus[channelName] && this.channelStatus[channelName].eventHandlerFactory) {
 			return this.channelStatus[channelName].eventHandlerFactory.getEventHubs();
 		}
 	}
