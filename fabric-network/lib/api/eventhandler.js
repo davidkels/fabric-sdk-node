@@ -33,7 +33,17 @@ class EventHandlerFactory {
 		// available event hubs, not necessarily connected event hubs, just ones that
 		// are available to be tried
 		//TODO: how should this be stored and returned for end users to use.
+	}
+
+	async initialize() {
 		this.availableEventHubs = [];
+		return;
+	}
+
+	cleanup() {
+		this.disconnectEventHubs();
+		this.availableEventHubs = [];
+		return;
 	}
 
 	addEventHub(eventHub) {
@@ -50,6 +60,7 @@ class EventHandlerFactory {
 
 	/**
      * check the status of the event hubs and attempt to reconnect any event hubs.
+	 * This is a non waitable request, should we have a waitable one ?
      */
 	checkEventHubs() {
 		for(const hub of this.availableEventHubs) {
@@ -57,7 +68,7 @@ class EventHandlerFactory {
 		}
 	}
 
-	disconnect() {
+	disconnectEventHubs() {
 		for (const hub of this.availableEventHubs) {
 			try {
 				hub.disconnect();
@@ -67,15 +78,15 @@ class EventHandlerFactory {
 		}
 	}
 
+	createTxEventHandler(txid) {
+		throw new Error('not implemented');
+	}
+
 	chaincodeEventsEnabled() {
 		return false;
 	}
 
 	createChaincodeEventHandler(chaincodeId, eventName) {
-		throw new Error('not implemented');
-	}
-
-	createTxEventHandler(txid) {
 		throw new Error('not implemented');
 	}
 
@@ -88,29 +99,11 @@ class EventHandlerFactory {
 
 class TxEventHandler {
 
-	/**
-     * Construct a Tx Event Handler.
-     * @param {EventHub[]} eventHubs the event hubs to listen for tx events
-     * @param {String} txId the txid that is driving the events to occur
-     * @param {Integer} timeout how long (in seconds) to wait for events to occur.
-     */
-	constructor(eventHubs, mspId, txId, options) {
-		if (!eventHubs || eventHubs.length === 0) {
-			throw new Error('No event hubs defined');
-		}
-		this.eventHubs = eventHubs;
-		this.txId = txId || '';
-		this.mspId = mspId;
-		this.options = options;
-
-		this.notificationPromise;
-		this.timeoutHandle;
-	}
 
 	/**
      * Start listening for events.
      */
-	startListening() {
+	async startListening() {
 		throw new Error('Not implemented');
 	}
 

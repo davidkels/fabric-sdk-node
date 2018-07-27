@@ -18,19 +18,6 @@
 const {TxEventHandler} = require('../../api/eventhandler');
 const EventHandlerConstants = require('./defaulteventstrategies');
 
-
-// Strategy definitions:
-// S1 - Listen for all on your org (add all event hubs for that org, wait for all that are still connected, minimum 1) - DEFAULT
-// S2 - Listen for any on your org (add all event hubs for that org, wait for first 1)
-// S3 - Listen for all peers in the channel (add all event hubs, wait for all, wait for all that are connected, minimum 1 from each org)
-// S4 - Listen for any peers in the channel  (add all event hubs, wait for first 1)
-
-// ---- COMPLEX strategies -----
-// - Listen for any org peer for all orgs in the channel (add all events hubs, wait for 1 from each org)
-
-// - Listen for all leader peers in the channel (if you can determine the leader peers)
-// - Listen for any leader peer in the channel (if you can determine the leader peers)
-
 const STRATEGY_PASSED = 1;
 const STRATEGY_STILLONGOING = 0;
 const STRATEGY_FAILED = -1;
@@ -44,8 +31,21 @@ class DefaultTxEventHandler extends TxEventHandler {
      * @param {String} txId the txid that is driving the events to occur
      * @param {Integer} timeout how long (in seconds) to wait for events to occur.
      */
-	constructor(eventHubs, mspId, txId, options) {
-		super(eventHubs, mspId, txId, options);
+	constructor(factory, txId) {
+		super();
+		this.eventHubs = factory.getEventHubs();
+		if (!this.eventHubs || this.eventHubs.length === 0) {
+			throw new Error('No event hubs defined');
+		}
+		if (!txId) {
+			throw new Error('No transaction id provided');
+		}
+		this.factory = factory;
+		this.txId = txId;
+		this.mspId = factory.mspId;
+		this.options = factory.options;
+
+		this.eventsByMspId = null;
 		this.notificationPromise = null;
 		this.timeoutHandle = null;
 
@@ -81,16 +81,31 @@ class DefaultTxEventHandler extends TxEventHandler {
 	 *
 	 * @memberof DefaultTxEventHandler
 	 */
-	_checkInitialCountByMspId() {
-		console.log('eventCount', this.eventCount);
-		if (this.eventCount.size === 0) {
-			throw new Error('no event hubs available');
+	async _checkInitialCountByMspId() {
+		console.log('eventCount', this.eventsByMspId);
+		let reestablish = false;
+		if (this.eventsByMspId.size === 0) {
+			reestablish = true;
 		}
-		this.eventCount.forEach((entry) => {
+		this.eventsByMspId.forEach((entry) => {
 			if (entry.initial < 1) {
-				throw new Error('not enough connected event hubs for to satisfy strategy');
+				reestablish = true;
 			}
 		});
+		if (reestablish) {
+			await this.factory._establishEventHubsForStrategy();
+		}
+
+		if (this.eventsByMspId.size === 0) {
+			throw new Error('no event hubs available');
+		}
+		this.eventsByMspId.forEach((entry) => {
+			if (entry.initial < 1) {
+				// try to recover the event hubs ?
+				throw new Error('not enough connected event hubs to satisfy strategy');
+			}
+		});
+
 	}
 
 	/**
@@ -98,13 +113,19 @@ class DefaultTxEventHandler extends TxEventHandler {
 	 *
 	 * @memberof DefaultTxEventHandler
 	 */
-	_checkInitialCountTotal() {
+	async _checkInitialCountTotal() {
 		let total = 0;
-		this.eventCount.forEach((entry) => {
+		this.eventsByMspId.forEach((entry) => {
 			total += entry.initial;
 		});
 		if (total < 1) {
-			throw new Error('not enough connected event hubs to satisfy strategy');
+			await this.factory._establishEventHubsForStrategy();
+			this.eventsByMspId.forEach((entry) => {
+				total += entry.initial;
+			});
+			if (total < 1) {
+				throw new Error('not enough connected event hubs to satisfy strategy');
+			}
 		}
 	}
 
@@ -149,7 +170,7 @@ class DefaultTxEventHandler extends TxEventHandler {
 		let failed = false;
 
 		// TODO: forEach is the wrong way to iterate here
-		this.eventCount.forEach((entry) => {
+		this.eventsByMspId.forEach((entry) => {
 			if (entry.valid === 0) {
 				if (entry.remaining === 0) {
 					failed = true;
@@ -180,7 +201,7 @@ class DefaultTxEventHandler extends TxEventHandler {
 	_checkRemainingEventsForAll(mspId, count) {
 		let totalleft = 0;
 
-		this.eventCount.forEach((entry) => {
+		this.eventsByMspId.forEach((entry) => {
 			totalleft += entry.remaining;
 		});
 
@@ -193,42 +214,44 @@ class DefaultTxEventHandler extends TxEventHandler {
 
 
 
-	_getConnectedHubs() {
+	async _getConnectedHubs() {
 		// requires that we know that all connect requests have been processed (either successfully or failed to connect)
 		const connectedHubs = [];
-		this.eventCount = new Map();
+		this.eventsByMspId = new Map();
 		for (const eventHub of this.eventHubs) {
 			// we can guarantee that at this point if an event hub could be connected then
 			// it will have been flagged as connected.
 			if (eventHub.isconnected()) {
 				connectedHubs.push(eventHub);
-				let count = this.eventCount.get(eventHub._EVH_mspId);
+				let count = this.eventsByMspId.get(eventHub._EVH_mspId);
 				if (!count) {
+
+					// initial number of connected event hubs for the mspid
+					// along with the remaining number of event hubs to respond
 					count = {initial: 1, remaining: 1};
+					this.eventsByMspId.set(eventHub._EVH_mspId, count);
 				} else {
 					count.initial++;
 					count.remaining++;
 				}
-				this.eventCount.set(eventHub._EVH_mspId, count);
 			} else {
 				console.log('event hub not connected');
-				eventHub.checkConnection(true);
 			}
 		}
 
 		const connectStrategy = this.strategyMap.get(this.options.strategy);
-		connectStrategy.checkInitialState.call(this);
+		await connectStrategy.checkInitialState.call(this);
 
 		return connectedHubs;
 	}
 
 	_checkStrategyStatus(mspId, errorReceived) {
-		const count = this.eventCount.get(mspId);
+		const count = this.eventsByMspId.get(mspId);
 		count.remaining--;
 		if (!errorReceived) {
 			count.valid = count.valid ? count.valid + 1 : 1;
 		}
-		this.eventCount.set(mspId, count);
+		this.eventsByMspId.set(mspId, count);
 
 		const connectStrategy = this.strategyMap.get(this.options.strategy);
 		if (!errorReceived) {
@@ -241,10 +264,10 @@ class DefaultTxEventHandler extends TxEventHandler {
 	/**
      * Start listening for events.
      */
-	startListening() {
+	async startListening() {
 
 		// - check that there are enough and correct connected event hubs to satisfy strategy
-		this.connectedHubs = this._getConnectedHubs();
+		this.connectedHubs = await this._getConnectedHubs();
 
 		let txResolve, txReject;
 
@@ -319,7 +342,7 @@ class DefaultTxEventHandler extends TxEventHandler {
 	/**
      * cancel listening for events
      */
-	cancelListening() {
+	async cancelListening() {
 		clearTimeout(this.timeoutHandle);
 		for (const hub of this.connectedHubs) {
 			hub.unregisterTxEvent(this.txId);

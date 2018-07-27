@@ -93,7 +93,7 @@ class Contract extends EventEmitter {
 		if (!txId) {
 			txId = this.network.getClient().newTransactionID();
 		}
-		let result = await this.queryHandler.queryChaincode(this.chaincodeId, transactionName, parameters, txId);
+		const result = await this.queryHandler.queryChaincode(this.chaincodeId, transactionName, parameters, txId);
 		return result ? result : null;
 	}
 
@@ -122,7 +122,7 @@ class Contract extends EventEmitter {
 		// node sdk will target all peers on the channel that are endorsingPeer or do something special for a discovery environment
 		const results = await this.channel.sendTransactionProposal(request);
 		const proposalResponses = results[0];
-		let {validResponses} = this._validatePeerResponses(proposalResponses);
+		const {validResponses} = this._validatePeerResponses(proposalResponses);
 
 		// Submit the endorsed transaction to the primary orderers.
 		const proposal = results[1];
@@ -130,7 +130,7 @@ class Contract extends EventEmitter {
 		let eventHandler;
 		if (this.eventHandlerFactory) {
 			eventHandler = this.eventHandlerFactory.createTxEventHandler(txId.getTransactionID());
-			eventHandler.startListening();
+			await eventHandler.startListening();
 		}
 
 		const response = await this.channel.sendTransaction({
@@ -154,14 +154,6 @@ class Contract extends EventEmitter {
 		return proposalResponses[0].response.payload;
 
 	}
-
-	getEventHubs() {
-		if (this.eventHandlerFactory) {
-			return this.eventHandlerFactory.getEventHubs();
-		}
-		return [];
-	}
-
 }
 
 module.exports = Contract;

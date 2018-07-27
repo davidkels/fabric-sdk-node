@@ -45,19 +45,30 @@ class DefaultEventHandlerFactory extends EventHandlerFactory {
 	}
 
 	async initialize() {
+		await super.initialize();
 		if (!this.initialized) {
 			this.useFullBlocks = this.options.useFullBlocks || this.options.chaincodeEventsEnabled;
 			if (this.useFullBlocks === null || this.useFullBlocks === undefined) {
 				this.useFullBlocks = false;
 			}
 
-			const connectStrategy = this.strategyMap.get(this.options.strategy);
-			await connectStrategy.call(this, this.mspId);
-			if (this.getEventHubs().length === 0) {
-				throw new Error('No available event hubs found for strategy');
-			}
-
+			await this._establishEventHubsForStrategy();
 			this.initialized = true;
+		}
+	}
+
+	cleanup() {
+		super.cleanup();
+		this.initialized = false;
+	}
+
+	async _establishEventHubsForStrategy() {
+		// clear out the current set of event hubs
+		this.setEventHubs([]);
+		const connectStrategy = this.strategyMap.get(this.options.strategy);
+		await connectStrategy.call(this, this.mspId);
+		if (this.getEventHubs().length === 0) {
+			throw new Error('No available event hubs found for strategy');
 		}
 	}
 
@@ -72,6 +83,8 @@ class DefaultEventHandlerFactory extends EventHandlerFactory {
 	 * @memberof DefaultEventHandlerFactory
 	 */
 	_setupEventHubsForMspid(mspId, connectPromises) {
+
+		//TODO: We need to have a timeout
 		const orgPeers = this.peerMap.get(mspId);
 		if (orgPeers.length > 0) {
 			for (const orgPeer of orgPeers) {
@@ -93,8 +106,6 @@ class DefaultEventHandlerFactory extends EventHandlerFactory {
 					);
 				});
 				connectPromises.push(connectPromise);
-
-				//TODO: need to control filtered vs full somehow, users may not want full block retrieval
 				eventHub.connect(this.useFullBlocks);
 			}
 		}
@@ -145,7 +156,7 @@ class DefaultEventHandlerFactory extends EventHandlerFactory {
 	createTxEventHandler(txid) {
 		// pass in all available eventHubs to listen on, the handler decides when to resolve based on strategy
 		// a TxEventHandler should check that the available ones are usable when appropriate.
-		return new DefaultTxEventHandler(this.getEventHubs(), this.mspId, txid, this.options);
+		return new DefaultTxEventHandler(this, txid);
 	}
 }
 

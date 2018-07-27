@@ -1,8 +1,9 @@
-import {Channel, User, ChannelEventHub, TransactionId} from 'fabric-client';
+import {Channel, User, ChannelEventHub, TransactionId, ICryptoKey} from 'fabric-client';
 import { EventEmitter } from 'events';
+import Client = require('fabric-client');
 
 // workaround as client isn't exported from fabric-client and it should be
-type Client = any;
+//type Client = any;
 
 declare namespace FabricNetwork {
 
@@ -20,56 +21,115 @@ declare namespace FabricNetwork {
 		}
 	}
 
+
+	//-------------------------------------------
+	// Main fabric network classes
+	//-------------------------------------------
 	export class Network {
-		//TODO: how to we create a network from a client ?
 		constructor();
-		initialize(ccp: string, options?: InitOptions): Promise<void>;
-		rediscover(channelName: string): Promise<void>;
+
+		// is this how we want to initialise based on ccp or Client ?
+		initialize(ccp: string | Client, options?: InitOptions): Promise<void>;
 		setIdentity(newIdentity: string): Promise<void>;
 		getCurrentIdentity(): User;
 		getClient(): Client;
-		// TODO: do we want to maybe map these to mspid, also no guarantee they are connected.
+		getOptions(): InitOptions;
+		getChannel(channelName: string): Promise<FabricNetwork.Channel>;
+		cleanup(): void;
+	}
+
+	export class Channel {
+		initialize(): Promise<void>;
+		getInternalChannel(): Channel;
+		getPeerMap(): Map<string, any>; // TODO: any is not right
+		rediscover(): Promise<void>;
+		getContract(chaincodeId: string): Contract;
+		// array of mapped by mspid ?
 		getEventHubs(): ChannelEventHub[];
-		cleanup(): Promise<void>;
-		getContract(channelName: string, chaincodeId: string): Promise<Contract>;
+		cleanup(): void;
+
 	}
 
 	export class Contract extends EventEmitter {
 		query(transactionName: string, parameters: string[], txId?: TransactionId): Promise<Buffer>;
 		submitTransaction(transactionName: string, parameters: string[], txId?: TransactionId): Promise<Buffer>;
-
-		// TODO: similar to above regarding returning the eventhubs
-		getEventHubs(): ChannelEventHub[];
 	}
 
+	//-------------------------------------------
+	// Wallet Management
+	//-------------------------------------------
+	export interface Identity {
+		type: string
+	}
 
-	// TODO: Wallet plugin type definitions, only defines end user apis, not spi's
-	export abstract class Wallet {
+	export interface X509Identity extends Identity {
+		certificate: string,
+		privateKey?: string
+	}
+
+	export interface CryptoContent {
+			signedCertPEM: string,
+			privateKeyPEM?: string,
+			privateKeyObj?: ICryptoKey
+	}
+
+	export interface WalletProvider {
+		normalizeLabel(label: string): string;
+		setupStateStore(client: Client, label: string): Promise<void>;
+		setupKeyStore(client: Client, label: string): Promise<void>;
+	}
+
+	// TODO: only specific to X509, what about idemix ?
+	export abstract class Wallet implements WalletProvider {
+		//Wallet User
 		import(label: string, mspId: string, certificate: string, privateKey?: string): Promise<void>;
-		export(label: string): Promise<any>; // what should this provide ?
-		update(label: string, certificate: string, privateKey?: string): Promise<void>;
-		delete(label: string): Promise<void>;
-		list(): Promise<any>;  // Todo what should list provide ?
-		exists(label: string): Promise<boolean>;
+		export(label: string): Promise<X509Identity>;
+		abstract update(label: string, certificate: string, privateKey?: string): Promise<void>;
+		abstract delete(label: string): Promise<void>;
+		abstract list(): Promise<any>;  // Todo what should list provide ?
+		abstract exists(label: string): Promise<boolean>;
 		setKeyWalletMixin(walletMixin: WalletMixin): void;
+
+		// WalletProvider
+		normalizeLabel(label: string): string;
+		abstract setupStateStore(client: Client, label: string): Promise<void>;
+		abstract setupKeyStore(client: Client, label: string): Promise<void>;
 	}
 
 	export interface WalletMixin {
 		setupKeyStore(client: Client, label: string): void;
-		createCryptoContent(publicCert: string, privateKey: string): Promise<any>; // TODO: need a definition for the return
-		exportCryptoContent(user: User): any; // TODO: Need to define the return
+		createCryptoContent(publicCert: string, privateKey: string): Promise<CryptoContent>;
+		exportCryptoContent(user: User): X509Identity;
 	}
 
 	// Real usable Wallet implementations
 	export class InMemoryWallet extends Wallet {
+		update(label: string, certificate: string, privateKey?: string): Promise<void>;
+		delete(label: string): Promise<void>;
+		list(): Promise<any>;  // Todo what should list provide ?
+		exists(label: string): Promise<boolean>;
+		setupStateStore(client: Client, label: string): Promise<void>;
+		setupKeyStore(client: Client, label: string): Promise<void>;
 	}
 
 	export class FileSystemWallet extends Wallet {
 		constructor(path: string);
+		update(label: string, certificate: string, privateKey?: string): Promise<void>;
+		delete(label: string): Promise<void>;
+		list(): Promise<any>;  // Todo what should list provide ?
+		exists(label: string): Promise<boolean>;
+		setupStateStore(client: Client, label: string): Promise<void>;
+		setupKeyStore(client: Client, label: string): Promise<void>;
 	}
 
 	export class CouchDBWallet extends Wallet {
 		constructor(options: any); // TODO: need to define the option format here
+		update(label: string, certificate: string, privateKey?: string): Promise<void>;
+		delete(label: string): Promise<void>;
+		list(): Promise<any>;  // Todo what should list provide ?
+		exists(label: string): Promise<boolean>;
+		setupStateStore(client: Client, label: string): Promise<void>;
+		setupKeyStore(client: Client, label: string): Promise<void>;
 	}
 
 	export class HSMWalletMixin implements WalletMixin {  // TODO: do we need to declare that it implements WalletMixin ?
@@ -79,35 +139,43 @@ declare namespace FabricNetwork {
 		exportCryptoContent(user: User): any; // TODO: Need to define the return
 	}
 
-	// query handler plugin type definitions
-	export abstract class QueryHandler {
-		constructor(channel: Channel, mspId: string, peerMap: Map<string, any>, queryOptions: any); //TODO: need a definition of the peer map
+	//-------------------------------------------
+	// Plugins
+	//-------------------------------------------
 
-		queryChaincode(chaincodeId: string, functionName: string, params: string, txId: TransactionId): Promise<Buffer>;
+	//-------------------------------------------
+	// query handler plugin type definitions
+	//-------------------------------------------
+	export abstract class QueryHandler {
+		constructor(channel: Channel, mspId: string, peerMap: Map<string, Client.Peer>, queryOptions: any);
+		initialize(): Promise<void>;
+		abstract queryChaincode(chaincodeId: string, functionName: string, params: string, txId: TransactionId): Promise<Buffer>;
+		cleanup(): void;
 	}
 
 
+	// -------------------------------------
 	// Event Handler plugin type definitions
+	// -------------------------------------
 	export abstract class EventHandlerFactory {
-		constructor(channel: string, mspId: string, peerMap: Map<string, any>, options: any); //TODO:
-
+		constructor(channel: string, mspId: string, peerMap: Map<string, Client.Peer>, eventHandlerOptions: any);
+		initalize(): Promise<void>;
+		cleanup(): void;
 		addEventHub(eventHub: ChannelEventHub): void;
 		//TODO: need to consider how this should be returned
 		getEventHubs(): ChannelEventHub[];
 		setEventHubs(availableEventHubs: ChannelEventHub[]): void;
 		checkEventHubs(): void;
-		disconnect(): void;
-		chaincodeEventsEnabled(): boolean;
-		//abstract createChaincodeEventHandler(chaincodeId: string, eventName: string): ChaincodeEventHandler;
+		disconnectEventHubs(): void;
 		abstract createTxEventHandler(txid: string): TxEventHandler;
+
+		// chaincodeEventsEnabled(): boolean;
+		//abstract createChaincodeEventHandler(chaincodeId: string, eventName: string): ChaincodeEventHandler;
 		//abstract createBlockEventHandler(): BlockEventHandler;
 	}
 
-	export abstract class TxEventHandler extends EventHandlerFactory {
-		//TODO: should the eventHubs be an array or an EventHubMap ?
-		//TODO: do we want timeout to be explicit rather than an option ?
-		constructor(eventHubs: ChannelEventHub[], mspId: string, txId: string, options: any);
-		abstract startListening() : void;
+	export abstract class TxEventHandler {
+		abstract startListening() : Promise<void>;
 		abstract waitForEvents() : Promise<void>;
 		abstract cancelListening(): void;
 	}

@@ -53,7 +53,7 @@ class DefaultQueryHandler extends QueryHandler {
 	async queryChaincode(chaincodeId, functionName, args, txId) {
 		let success = false;
 		let payload;
-		let allErrors = [];
+		const allErrors = [];
 
 		if (this.allQueryablePeers.length === 0) {
 			const newError = new Error('No peers have been provided that can be queried');
@@ -62,7 +62,7 @@ class DefaultQueryHandler extends QueryHandler {
 
 		// try the last successful peer
 		if (this.queryPeerIndex !== -1) {
-			let peer = this.allQueryablePeers[this.queryPeerIndex];
+			const peer = this.allQueryablePeers[this.queryPeerIndex];
 			try {
 				payload = await this._querySinglePeer(peer, chaincodeId, functionName, args, txId);
 				success = true;
@@ -75,13 +75,13 @@ class DefaultQueryHandler extends QueryHandler {
 
 			// last successful peer failed or this is the first attempt at any query, so try to find a
 			// peer to query.
-			let failedPeer = this.queryPeerIndex;  // could be -1 if first attempt
+			const failedPeer = this.queryPeerIndex;  // could be -1 if first attempt
 			this.queryPeerIndex = -1;
 			for (let i = 0; i < this.allQueryablePeers.length && !success; i++) {
 				if (i === failedPeer) {
 					continue;
 				}
-				let peer = this.allQueryablePeers[i];
+				const peer = this.allQueryablePeers[i];
 				try {
 					payload = await this._querySinglePeer(peer, chaincodeId, functionName, args, txId);
 					this.queryPeerIndex = i;
@@ -124,7 +124,7 @@ class DefaultQueryHandler extends QueryHandler {
 			args: args
 		};
 
-		let payloads = await this.channel.queryByChaincode(request);
+		const payloads = await this.channel.queryByChaincode(request);
 		if (!payloads.length) {
 			throw new Error('No payloads were returned from the query request:' + functionName);
 		}

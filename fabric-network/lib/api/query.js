@@ -23,8 +23,16 @@ class QueryHandler {
 		this.queryOptions = queryOptions;
 	}
 
+	async initialize() {
+		return;
+	}
+
 	async queryChaincode(chaincodeId, functionName, params, txId) {
 		throw new Error('Not implemented');
+	}
+
+	cleanup() {
+		return;
 	}
 }
 

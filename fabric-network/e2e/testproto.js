@@ -118,32 +118,43 @@ const fs = require('fs');
 			let contract;
 			let response;
 			let blockToQuery;
+			let channel;
 
-			console.log('testing network with file system identity:');
-			contract = await network.getContract('composerchannel', 'demo');
-			let eventHubs = network.getEventHubs('composerchannel');
+			console.log('---> start testing network with file system identity:');
+			channel = await network.getChannel('composerchannel');
+			contract = await channel.getContract('demo');
+
+			let eventHubs = channel.getEventHubs();
 
 			eventHubs[0].registerBlockEvent((block) => {  //TODO: Note that eventHubs have a special field defining which mspId they are in.
 				console.log('block---->');
 				console.log(block);
 				blockToQuery = block.header.number;
 			});
+
 			response = await contract.submitTransaction('invoke', ['key1', 'key2', '50']);
 			console.log('got response 1: ' + response);
-			let channel = network.getClient().getChannel();
-			let blk = await channel.queryBlock(blockToQuery * 1);
+
+			let rawchannel = channel.getInternalChannel();
+			let blk = await rawchannel.queryBlock(blockToQuery * 1);
 			console.log('blk--->');
 			console.log(JSON.stringify(blk.data.data[0].payload.data.actions));
+			console.log('<--- Finish testing network with file system identity');
 
 
-			console.log('testing query only network with file system identity:');
-			contract = await queryNetwork.getContract('composerchannel', 'demo');
+
+			console.log('---> start testing query only network with file system identity:');
+			channel = await queryNetwork.getChannel('composerchannel');
+			contract = await channel.getContract('demo');
 			response = await contract.query('query', ['key1']);
 			console.log('got response: ' + response);
+			console.log('<--- Finish testing query only network with file system identity');
 
 
-			console.log('testing network with in memory identity:');
-			contract = await memNetwork.getContract('composerchannel', 'demo');
+
+			console.log('---> start testing network with in memory identity:');
+			channel = await memNetwork.getChannel('composerchannel');
+			contract = await channel.getContract('demo');
 			response = await contract.submitTransaction('invoke', ['key1', 'key2', '50']);
 			console.log('got response: ' + response);
 			response = await contract.submitTransaction('invoke', ['key1', 'key2', '50']);
@@ -156,12 +167,17 @@ const fs = require('fs');
 			//response = await contract.submitTransaction('invoke', ['key1', 'key2', '50']);
 			//response = await contract.submitTransaction('invoke', ['key1', 'key2', '50']);
 			//response = await contract.submitTransaction('invoke', ['key1', 'key2', '50']);
+			console.log('<--- finish testing network with in memory identity:');
+
+
+
 
 			if (testHSM) {
-				console.log('testing network with hsm identity:');
+				console.log('---> start testing network with hsm identity:');
 				contract = await hsmNetwork.getContract('composerchannel', 'demo');
 				response = await contract.submitTransaction('invoke', ['key1', 'key2', '50']);
 				console.log('got response: ' + response);
+				console.log('<--- finish testing network with hsm identity:');
 			}
 
 		} catch(error) {
@@ -170,7 +186,8 @@ const fs = require('fs');
 	} catch(error) {
 		console.log(error);
 	} finally {
-		console.log('disconnecting');
+		console.log('cleaning up');
+		queryNetwork.cleanup();
 		memNetwork.cleanup();
 		network.cleanup();
 		if (testHSM) {

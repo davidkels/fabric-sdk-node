@@ -19,6 +19,14 @@ const Client = require('fabric-client');
 
 class Wallet  {
 
+	static createX509Identity(certificate, privateKey) {
+		return {
+			type: 'X509',
+			certificate,
+			privateKey
+		};
+	}
+
 	constructor() {
 		this.storesInitialized = false;
 		this.KeyWalletMixin = null;
@@ -27,10 +35,6 @@ class Wallet  {
 	setKeyWalletMixin(walletMixin) {
 		//TODO: perform some validation
 		this.keyWalletMixin = walletMixin;
-	}
-
-	normalizeLabel(label) {
-		return label;
 	}
 
 	/**
@@ -67,6 +71,10 @@ class Wallet  {
 			this.setupKeyStore(client, label);
 		}
 		return client;
+	}
+
+	normalizeLabel(label) {
+		return label;
 	}
 
 	async setupStateStore(client, label) {

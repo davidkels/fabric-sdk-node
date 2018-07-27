@@ -16,20 +16,20 @@
 'use strict';
 
 const Client = require('fabric-client');
-const Contract = require('./contract');
-const FABRIC_CONSTANTS = require('fabric-client/lib/Constants');
-const EventHandlerConstants = require('./impl/event/defaulteventstrategies');
+const Channel = require('./channel');
+const DefaultEventStrategies = require('./impl/event/defaulteventstrategies');
+const logger = require('./logger').getLogger('Network');
 
 
 class Network {
 
-	static mergeOptions(defaultOptions, suppliedOptions) {
+	static _mergeOptions(defaultOptions, suppliedOptions) {
 		for (const prop in suppliedOptions) {
 			if (suppliedOptions[prop] instanceof Object && prop.endsWith('Options')) {
 				if (defaultOptions[prop] === undefined) {
 					defaultOptions[prop] = suppliedOptions[prop];
 				} else {
-					Network.mergeOptions(defaultOptions[prop], suppliedOptions[prop]);
+					Network._mergeOptions(defaultOptions[prop], suppliedOptions[prop]);
 				}
 			} else {
 				defaultOptions[prop] = suppliedOptions[prop];
@@ -38,15 +38,17 @@ class Network {
 	}
 
 	constructor() {
+		logger.debug('in Network constructor');
 		this.client = null;
-		this.channelStatus = {};
+		this.wallet = null;
+		this.channels = new Map();
 
+		// default options
 		this.options = {
 			commitTimeout: 300 * 1000,
 			eventHandlerFactory: './impl/event/defaulteventhandlerfactory',
-			// not appropriate options if not the above impl
 			eventHandlerOptions: {
-				strategy: EventHandlerConstants.MSPID_SCOPE_ALLFORTX,
+				strategy: DefaultEventStrategies.MSPID_SCOPE_ALLFORTX,
 				timeout: 60
 			},
 			queryHandler: './impl/query/defaultqueryhandler',
@@ -65,7 +67,6 @@ class Network {
 				// discoveryRefresh: 300000 (TODO: on a timeout or only when submit is done ?)
 			}
 		};
-		this.wallet = null;
 	}
 
 	/**
@@ -80,17 +81,21 @@ class Network {
 			throw new Error('A wallet must be assigned to a Network instance');
 		}
 
-		Network.mergeOptions(this.options, options);
+		// if the default handlers have been changed, delete the default options before merging.
+		if (options.eventHandlerFactory && this.options.eventHandlerFactory !== options.eventHandlerFactory) {
+			console.log('deleting event handler options');
+			delete this.options.eventHandlerOptions;
+		}
+		if (options.queryHandler && this.options.queryHandler !== options.queryHandlerFactory) {
+			delete this.options.queryHandlerOptions;
+		}
+
+		Network._mergeOptions(this.options, options);
 
 
-		// initialize the behaviours for event handling and querying
-		// we will default to the standard node-sdk behaviours for
-		// submission which are
-		// 1. if using a CCP then submit to all peers defined in the channel that are ENDORSING_PEERS
-		// 2. use the standard Service Discovery Plugin.
 		if (this.options.eventHandlerFactory) {
 			try {
-				this.eventHandlerFactory = require(this.options.eventHandlerFactory);
+				this.eventHandlerFactoryClass = require(this.options.eventHandlerFactory);
 			} catch(error) {
 				console.log(error);
 				throw new Error('unable to load provided event handler factory: ' + this.options.eventHandlerFactory);
@@ -109,8 +114,10 @@ class Network {
 			Client.setConfigSetting('discovery-protocol', this.options.discoveryOptions.discoveryProtocol);
 		}
 
-		// still use a ccp for the discovery peer and ca information
-		this.client = Client.loadFromConfig(ccp);
+		if (!(ccp instanceof Client)) {
+			// still use a ccp for the discovery peer and ca information
+			this.client = Client.loadFromConfig(ccp);
+		}
 
 		// setup an initial identity for the network
 		if (options.identity) {
@@ -118,15 +125,8 @@ class Network {
 		}
 	}
 
-	async rediscover(channelName) {
-		// TODO: This still needs to be done
-		// what happens if the list of peers changes ?
-		// 1. need to rebuild an eventHandlerFactory and queryHandler for the channel
-		// 2. need to inform existing contracts to swap to the new handlers
-	}
-
 	/**
-	 * Allow you to switch the identity used by contracts of this network
+	 * Allows you to set the identity after network initialization, may remove.
 	 *
 	 * @param {*} newIdentity
 	 * @memberof Network
@@ -163,17 +163,41 @@ class Network {
 		return this.client;
 	}
 
-	/**
-	 * get the event hubs being used for a specific channel
-	 *
-	 * @param {*} channelName
-	 * @returns
-	 * @memberof Network
-	 */
-	getEventHubs(channelName) {
-		if (this.channelStatus[channelName] && this.channelStatus[channelName].eventHandlerFactory) {
-			return this.channelStatus[channelName].eventHandlerFactory.getEventHubs();
+
+	getOptions() {
+		return this.options;
+	}
+
+	async _createEventHandlerFactory(channel, peerMap) {
+
+		if (this.eventHandlerFactoryClass) {
+			// TODO: Should not use private var of User object (_mspId)
+			const currentmspId = this.getCurrentIdentity()._mspId;
+			const eventHandlerFactory = new this.eventHandlerFactoryClass(
+				channel,
+				currentmspId,
+				peerMap,
+				this.options.eventHandlerOptions
+			);
+			await eventHandlerFactory.initialize();
+			return eventHandlerFactory;
 		}
+		return null;
+	}
+
+	async _createQueryHandler(channel, peerMap) {
+		if (this.queryHandlerClass) {
+			const currentmspId = this.getCurrentIdentity()._mspId;
+			const queryHandler = new this.queryHandlerClass(
+				channel,
+				currentmspId,
+				peerMap,
+				this.options.queryHandlerOptions
+			);
+			await queryHandler.initialize();
+			return queryHandler;
+		}
+		return null;
 	}
 
 	/**
@@ -181,145 +205,23 @@ class Network {
 	 *
 	 * @memberof Network
 	 */
-	async cleanup() {
-		for (const channelName in this.channelStatus) {
-			if (this.channelStatus[channelName].eventHandlerFactory) {
-				this.channelStatus[channelName].eventHandlerFactory.disconnect();
-				delete this.channelStatus[channelName].eventHandlerFactory;
-			}
+	cleanup() {
+		for (const channel of this.channels.values()) {
+			channel.cleanup();
 		}
+		this.channels.clear();
 	}
 
-	/**
-     * initialize the channel if it hasn't been done
-     * @private
-     */
-	async _initializeChannel(channel) {
-		//TODO: Should this work across all peers or just orgs peers ?
-		//TODO: should sort peer list to the identity org initializing the channel.
-
-		const ledgerPeers = channel.getPeers().filter((cPeer) => {
-			return cPeer.isInRole(FABRIC_CONSTANTS.NetworkConfig.LEDGER_QUERY_ROLE);
-		});
-
-		if (ledgerPeers.length === 0) {
-			throw new Error('no suitable peers available to initialize from');
+	async getChannel(channelName) {
+		const existingChannel = this.channels.get(channelName);
+		if (!existingChannel) {
+			const channel = this.client.getChannel(channelName);
+			const newChannel = new Channel(this, channel);
+			await newChannel.initialize();
+			this.channels.set(channelName, newChannel);
+			return newChannel;
 		}
-
-		let ledgerPeerIndex = 0;
-		let success = false;
-
-		while (!success) {
-			try {
-				let discoveryOptions = null;
-				if (this.options.useDiscovery) {
-					discoveryOptions = {
-						discover: true
-					};
-					if (this.options.discoveryOptions && this.options.discoveryOptions.asLocalhost) {
-						discoveryOptions.asLocalhost = this.options.discoveryOptions.asLocalhost;
-					}
-				}
-
-				await channel.initialize(discoveryOptions);
-				success = true;
-			} catch(error) {
-				if (ledgerPeerIndex >= ledgerPeers.length - 1) {
-					throw new Error(`Unable to initalize channel. Attempted to contact ${ledgerPeers.length} Peers. Last error was ${error}`);
-				}
-				ledgerPeerIndex++;
-			}
-		}
-	}
-
-	/**
-	 * create a map of mspId's and the channel peers in those mspIds
-	 *
-	 * @memberof Network
-	 */
-	_mapPeersToMSPid(channel) {
-		// TODO: assume 1-1 mapping of mspId to org as the node-sdk makes that assumption
-		// otherwise we woukd need to find the channel peer in the network config collection or however SD
-		// stores things
-
-		const peerMap = new Map();
-		const channelPeers = channel.getPeers();
-
-		// bug in service discovery, peers don't have the associated mspid
-		if (channelPeers.length > 0) {
-			for (const channelPeer of channelPeers) {
-				const mspId = channelPeer.getMspid();
-				if (mspId) {
-					let peerList = peerMap.get(mspId);
-					if (!peerList) {
-						peerList = [];
-						peerMap.set(mspId, peerList);
-					}
-					peerList.push(channelPeer);
-				}
-			}
-		}
-		if (peerMap.size === 0) {
-			throw new Error('no suitable peers associated with mspIds were found');
-		}
-		return peerMap;
-	}
-
-
-
-	//TODO: cache the contract, keyed off the channelName+chaincodeId
-	async getContract(channelName, chaincodeId) {
-		const channel = this.client.getChannel(channelName);
-
-		// initialize the channel if not initialized (initialize can use the peer map to
-		// restrict the peers or to process in a specific order, currently it doesn't
-		if (!this.channelStatus[channelName]) {
-			await this._initializeChannel(channel);
-			this.channelStatus[channelName] = {};
-		}
-
-		// build a peer map for the channel if not cached
-		if (!this.channelStatus[channelName].peerMap) {
-			this.channelStatus[channelName].peerMap = this._mapPeersToMSPid(channel);
-		}
-
-		// TODO: Should not use private var of User object (_mspId)
-		const currentmspId = this.currentIdentity._mspId;
-
-		// TODO: only required if submit notify is to be used
-		// TODO: we need to filter down the event source peers based on roles, for now we will assume all in the peerMap are event sources
-		// or assume the plugins do the work
-		// create an event handler factory for the channel
-		if (!this.channelStatus[channelName].eventHandlerFactory && this.eventHandlerFactory) {
-			this.channelStatus[channelName].eventHandlerFactory =
-				new this.eventHandlerFactory(
-					channel,
-					currentmspId,
-					this.channelStatus[channelName].peerMap,
-					this.options.eventHandlerOptions
-				);
-			await this.channelStatus[channelName].eventHandlerFactory.initialize();
-		}
-
-		// TODO: we need to filter down the queryable peers based on roles, for now we will assume all in the peerMap are chaincode queryable
-		// or assume the plugins do the work
-		// create a query handler for the channel.
-		this.channelStatus[channelName].queryHandler =
-			new this.queryHandlerClass(
-				channel,
-				currentmspId,
-				this.channelStatus[channelName].peerMap,
-				this.options.queryHandlerOptions
-			);
-
-		// Create the new Contract
-		return new Contract(
-			channel,
-			chaincodeId,
-			this.channelStatus[channelName].eventHandlerFactory,
-			this.channelStatus[channelName].queryHandler,
-			this
-		);
+		return existingChannel;
 	}
 }
 
