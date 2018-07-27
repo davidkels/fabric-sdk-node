@@ -23,6 +23,20 @@ const EventHandlerConstants = require('./impl/event/defaulteventstrategies');
 
 class Network {
 
+	static mergeOptions(defaultOptions, suppliedOptions) {
+		for (const prop in suppliedOptions) {
+			if (suppliedOptions[prop] instanceof Object && prop.endsWith('Options')) {
+				if (defaultOptions[prop] === undefined) {
+					defaultOptions[prop] = suppliedOptions[prop];
+				} else {
+					Network.mergeOptions(defaultOptions[prop], suppliedOptions[prop]);
+				}
+			} else {
+				defaultOptions[prop] = suppliedOptions[prop];
+			}
+		}
+	}
+
 	constructor() {
 		this.client = null;
 		this.channelStatus = {};
@@ -43,7 +57,7 @@ class Network {
 			// TODO: We need a timeout when submitTransaction is called to determine if a refresh should
 			// be made.
 			useDiscovery: false,
-			discoverOptions: {
+			discoveryOptions: {
 				// These are the defaults set by the node-sdk, can use env vars
 				// or programmatically specify through the options.
 				// discoveryProtocol: 'grpcs',
@@ -66,8 +80,7 @@ class Network {
 			throw new Error('A wallet must be assigned to a Network instance');
 		}
 
-		Object.assign(this.options, options);
-		let factory = this.options.eventHandlerFactory;
+		Network.mergeOptions(this.options, options);
 
 
 		// initialize the behaviours for event handling and querying
@@ -77,24 +90,23 @@ class Network {
 		// 2. use the standard Service Discovery Plugin.
 		if (this.options.eventHandlerFactory) {
 			try {
-				this.eventHandlerFactory = require(factory);
+				this.eventHandlerFactory = require(this.options.eventHandlerFactory);
 			} catch(error) {
 				console.log(error);
-				throw new Error('unable to load provided event handler factory: ' + factory);
+				throw new Error('unable to load provided event handler factory: ' + this.options.eventHandlerFactory);
 			}
 		}
 
-		let handler = this.options.queryHandler;
 		try {
-			this.queryHandlerClass = require(handler);
+			this.queryHandlerClass = require(this.options.queryHandler);
 		} catch(error) {
 			console.log(error);
-			throw new Error('unable to load provided query handler: ' + handler);
+			throw new Error('unable to load provided query handler: ' + this.options.queryHandler);
 		}
 
 		// These are global to the app, but would assume you won't want a mixture of discover and non discover
-		if (this.options.useDiscovery && this.options.discoverOptions && this.options.discoverOptions.discoveryProtocol) {
-			Client.setConfigSetting('discovery-protocol', this.options.discoverOptions.discoveryProtocol);
+		if (this.options.useDiscovery && this.options.discoveryOptions && this.options.discoveryOptions.discoveryProtocol) {
+			Client.setConfigSetting('discovery-protocol', this.options.discoveryOptions.discoveryProtocol);
 		}
 
 		// still use a ccp for the discovery peer and ca information
@@ -170,7 +182,7 @@ class Network {
 	 * @memberof Network
 	 */
 	async cleanup() {
-		for (let channelName in this.channelStatus) {
+		for (const channelName in this.channelStatus) {
 			if (this.channelStatus[channelName].eventHandlerFactory) {
 				this.channelStatus[channelName].eventHandlerFactory.disconnect();
 				delete this.channelStatus[channelName].eventHandlerFactory;
@@ -199,17 +211,17 @@ class Network {
 
 		while (!success) {
 			try {
-				let discoverOptions = null;
+				let discoveryOptions = null;
 				if (this.options.useDiscovery) {
-					discoverOptions = {
+					discoveryOptions = {
 						discover: true
 					};
-					if (this.options.discoverOptions && this.options.discoverOptions.asLocalhost) {
-						discoverOptions.asLocalhost = this.options.discoverOptions.asLocalhost;
+					if (this.options.discoveryOptions && this.options.discoveryOptions.asLocalhost) {
+						discoveryOptions.asLocalhost = this.options.discoveryOptions.asLocalhost;
 					}
 				}
 
-				await channel.initialize(discoverOptions);
+				await channel.initialize(discoveryOptions);
 				success = true;
 			} catch(error) {
 				if (ledgerPeerIndex >= ledgerPeers.length - 1) {
@@ -235,7 +247,7 @@ class Network {
 
 		// bug in service discovery, peers don't have the associated mspid
 		if (channelPeers.length > 0) {
-			for (let channelPeer of channelPeers) {
+			for (const channelPeer of channelPeers) {
 				const mspId = channelPeer.getMspid();
 				if (mspId) {
 					let peerList = peerMap.get(mspId);

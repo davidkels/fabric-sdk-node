@@ -223,7 +223,7 @@ class DefaultTxEventHandler extends TxEventHandler {
 	}
 
 	_checkStrategyStatus(mspId, errorReceived) {
-		let count = this.eventCount.get(mspId);
+		const count = this.eventCount.get(mspId);
 		count.remaining--;
 		if (!errorReceived) {
 			count.valid = count.valid ? count.valid + 1 : 1;
@@ -261,7 +261,7 @@ class DefaultTxEventHandler extends TxEventHandler {
 		this.timeoutHandle = setTimeout(() => {
 			this.cancelListening();
 			txReject(new Error('Event strategy not satisified within the timeout period'));
-		}, this.options.timeout);
+		}, this.options.timeout * 1000);
 
 		for (const hub of this.connectedHubs) {
 			console.log('registering for event');
@@ -282,6 +282,7 @@ class DefaultTxEventHandler extends TxEventHandler {
 					}
 				},
 				(err) => {
+					console.log('got an error', err);
 					hub.unregisterTxEvent(this.txId);
 					const strategyStatus = this._checkStrategyStatus(hub._EVH_mspId, true);
 					if (strategyStatus !== STRATEGY_STILLONGOING) {
@@ -305,6 +306,7 @@ class DefaultTxEventHandler extends TxEventHandler {
      * @returns {Promise} a promise which is resolved when all the events have been received, rejected if an error occurs.
      */
 	async waitForEvents() {
+		console.log('inside waitForEvents');
 		if (this.notificationPromise) {
 			console.log(new Date(), 'about to await');
 			await this.notificationPromise;

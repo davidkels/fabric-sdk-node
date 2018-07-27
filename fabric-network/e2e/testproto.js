@@ -63,7 +63,10 @@ const fs = require('fs');
 		// Create a network bound to a standard filesystem wallet
 		network = new Network();
 		await network.initialize(JSON.parse(buffer.toString()), {
-			wallet: wallet
+			wallet: wallet,
+			eventHandlerOptions: {
+				useFullBlocks: true
+			}
 		});
 
 		// create a query only network
@@ -82,7 +85,7 @@ const fs = require('fs');
 			wallet: inMemoryWallet,
 			identity: 'dave',
 			useDiscovery: true,
-			discoverOptions: {
+			discoveryOptions: {
 				discoveryProtocol: 'grpc',
 				asLocalhost: true
 			}

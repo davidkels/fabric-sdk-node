@@ -46,10 +46,11 @@ class DefaultEventHandlerFactory extends EventHandlerFactory {
 
 	async initialize() {
 		if (!this.initialized) {
-			console.log('connecting to event hubs');
-			if (this.useFull === undefined || this.useFull === null) {
-				this.useFull = true;
+			this.useFullBlocks = this.options.useFullBlocks || this.options.chaincodeEventsEnabled;
+			if (this.useFullBlocks === null || this.useFullBlocks === undefined) {
+				this.useFullBlocks = false;
 			}
+
 			const connectStrategy = this.strategyMap.get(this.options.strategy);
 			await connectStrategy.call(this, this.mspId);
 			if (this.getEventHubs().length === 0) {
@@ -94,7 +95,7 @@ class DefaultEventHandlerFactory extends EventHandlerFactory {
 				connectPromises.push(connectPromise);
 
 				//TODO: need to control filtered vs full somehow, users may not want full block retrieval
-				eventHub.connect(this.useFull);
+				eventHub.connect(this.useFullBlocks);
 			}
 		}
 	}
