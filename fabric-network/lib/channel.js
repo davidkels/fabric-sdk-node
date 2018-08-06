@@ -71,6 +71,7 @@ class Channel {
 	async _initializeInternalChannel() {
 		//TODO: Should this work across all peers or just orgs peers ?
 		//TODO: should sort peer list to the identity org initializing the channel.
+		//TODO: Candidate to push to low level node-sdk.
 
 		const ledgerPeers = this.channel.getPeers().filter((cPeer) => {
 			return cPeer.isInRole(FabricConstants.NetworkConfig.LEDGER_QUERY_ROLE);
@@ -85,17 +86,17 @@ class Channel {
 
 		while (!success) {
 			try {
-				let discoveryOptions = null;
+				const initOptions = {
+					target: ledgerPeers[ledgerPeerIndex]
+				};
 				if (this.useDiscovery) {
-					discoveryOptions = {
-						discover: true
-					};
+					initOptions.discover = true;
 					if (this.discoveryOptions && this.discoveryOptions.asLocalhost) {
-						discoveryOptions.asLocalhost = this.discoveryOptions.asLocalhost;
+						initOptions.asLocalhost = this.discoveryOptions.asLocalhost;
 					}
 				}
 
-				await this.channel.initialize(discoveryOptions);
+				await this.channel.initialize(initOptions);
 				success = true;
 			} catch(error) {
 				if (ledgerPeerIndex >= ledgerPeers.length - 1) {
@@ -167,6 +168,9 @@ class Channel {
 	}
 
 	cleanup() {
+		// Danger as this cached in network, and also async so how would
+		// channel.cleanup() followed by channel.initialize() be safe ?
+		// make this private is the safest option.
 		if (this.eventHandlerFactory) {
 			this.eventHandlerFactory.cleanup();
 		}

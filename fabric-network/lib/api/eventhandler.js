@@ -82,6 +82,8 @@ class EventHandlerFactory {
 		throw new Error('not implemented');
 	}
 
+
+	// Stretch goal stuff for chaincode event handling
 	chaincodeEventsEnabled() {
 		return false;
 	}
@@ -90,10 +92,6 @@ class EventHandlerFactory {
 		throw new Error('not implemented');
 	}
 
-	//TODO: what should we do here ?
-	createBlockEventHandler() {
-		throw new Error('not implemented');
-	}
 }
 
 

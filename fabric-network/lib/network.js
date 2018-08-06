@@ -48,6 +48,7 @@ class Network {
 			commitTimeout: 300 * 1000,
 			eventHandlerFactory: './impl/event/defaulteventhandlerfactory',
 			eventHandlerOptions: {
+				//TODO: Should we make this explicit rather than default ?
 				strategy: DefaultEventStrategies.MSPID_SCOPE_ALLFORTX,
 				timeout: 60
 			},
@@ -55,7 +56,6 @@ class Network {
 			queryHandlerOptions: {
 			},
 			// TODO: discovery-cache-age (only used by getDiscoveryResults)
-			// TODO: expose refresh.
 			// TODO: We need a timeout when submitTransaction is called to determine if a refresh should
 			// be made.
 			useDiscovery: false,

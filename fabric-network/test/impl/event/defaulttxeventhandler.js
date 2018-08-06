@@ -14,15 +14,15 @@
 
 'use strict';
 
-const HLFTxEventHandler = require('../lib/txeventhandler');
-const ChannelEventHub = require('../../fabric-client/lib/ChannelEventHub');
+const HLFTxEventHandler = require('../../../lib/impl/event/defaulttxeventhandler');
+const ChannelEventHub = require('fabric-client/lib/ChannelEventHub');
 
 const sinon = require('sinon');
 const chai = require('chai');
 const should = chai.should();
 chai.use(require('chai-as-promised'));
 
-describe('TxEventHandler', () => {
+describe('DefaultTxEventHandler', () => {
 
 	let sandbox/*, logWarnSpy*/;
 	let eventhub1, eventhub2;

@@ -50,13 +50,14 @@ class Contract extends EventEmitter {
 		}
 
 		const validResponses = [];
+		const invalidResponses = [];
 		const invalidResponseMsgs = [];
-		const ignoredErrors = 0;
 
 		responses.forEach((responseContent) => {
 			if (responseContent instanceof Error) {
 				const warning = `Response from attempted peer comms was an error: ${responseContent}`;
 				invalidResponseMsgs.push(warning);
+				invalidResponses.push(responseContent);
 			} else {
 
 				// not an error, if it is from a proposal, verify the response
@@ -66,6 +67,7 @@ class Contract extends EventEmitter {
 					// protobufs ourselves but it should really be the node sdk doing this.
 					const warning = `Proposal response from peer failed verification. ${responseContent.response}`;
 					invalidResponseMsgs.push(warning);
+					invalidResponses.push(responseContent);
 				} else if (responseContent.response.status !== 200) {
 					const warning = `Unexpected response of ${responseContent.response.status}. Payload was: ${responseContent.response.payload}`;
 					invalidResponseMsgs.push(warning);
@@ -75,13 +77,13 @@ class Contract extends EventEmitter {
 			}
 		});
 
-		if (validResponses.length === 0 && ignoredErrors < responses.length) {
+		if (validResponses.length === 0) {
 			const errorMessages = [ 'No valid responses from any peers.' ];
 			invalidResponseMsgs.forEach(invalidResponse => errorMessages.push(invalidResponse));
 			throw new Error(errorMessages.join('\n'));
 		}
 
-		return {ignoredErrors, validResponses, invalidResponseMsgs};
+		return {validResponses, invalidResponses, invalidResponseMsgs};
 	}
 
 	/**
@@ -90,6 +92,7 @@ class Contract extends EventEmitter {
      * @returns {byte[]} payload response
      */
 	async query(transactionName, parameters, txId) {
+		//TODO: Need to check parameters
 		if (!txId) {
 			txId = this.network.getClient().newTransactionID();
 		}
@@ -104,12 +107,22 @@ class Contract extends EventEmitter {
      * @returns {byte[]} payload response
      */
 	async submitTransaction(transactionName, parameters, txId) {
+		//TODO: Need to check parameters
 
 		if (!txId) {
 			txId = this.network.getClient().newTransactionID();
 		}
 
-		// TODO: check eventhubs are ok
+		// check the event hubs and connect any that have lost connection
+		// this is non blocking check so good to do it first
+		// startListening will do a more sledge hammer approach to try
+		// to ensure everything is avalable. But that is upto the
+		// eventhandler to implement.
+		// TODO: Should we have a blocking soln here for example ?
+		if (this.eventHandlerFactory) {
+			this.eventHandlerFactory.checkEventHubs();
+		}
+
 
 		// Submit the transaction to the endorsers.
 		const request = {
@@ -122,7 +135,13 @@ class Contract extends EventEmitter {
 		// node sdk will target all peers on the channel that are endorsingPeer or do something special for a discovery environment
 		const results = await this.channel.sendTransactionProposal(request);
 		const proposalResponses = results[0];
+
+		//TODO: what to do about invalidResponses
 		const {validResponses} = this._validatePeerResponses(proposalResponses);
+		if (validResponses.length === 0) {
+			//TODO: include the invalidResponsesMsgs ?
+			throw new Error('No valid responses from any peers');
+		}
 
 		// Submit the endorsed transaction to the primary orderers.
 		const proposal = results[1];
@@ -133,25 +152,43 @@ class Contract extends EventEmitter {
 			await eventHandler.startListening();
 		}
 
+		//TODO: more to do regarding checking the response (see hlfconnection.invokeChaincode)
+
 		const response = await this.channel.sendTransaction({
 			proposalResponses: validResponses,
 			proposal
 		});
 
 		if (response.status !== 'SUCCESS') {
-			eventHandler.cancelListening();
+			if (eventHandler) {
+				eventHandler.cancelListening();
+			}
 			throw new Error(`Failed to send peer responses for transaction '${txId.getTransactionID()}' to orderer. Response status '${response.status}'`);
 		}
 
 		console.log('waiting for events');
 		if (eventHandler) {
-			await eventHandler.waitForEvents();
+			try {
+				await eventHandler.waitForEvents();
+			} catch(err) {
+				// TODO: Need to distinguish between Bad Peer response and something else
+				if (validResponses && validResponses.length >= 2 && !this.channel.compareProposalResponseResults(validResponses)) {
+					const warning = 'Peers do not agree, Read Write sets differ';
+					//TODO: What should be done here
+					//LOG.warn(method, warning);
+				}
+				throw err;
+			}
 		}
 		console.log('got events');
 		// return the payload from the invoked chaincode
 		console.log('returns: ', proposalResponses[0].response.payload);
 
-		return proposalResponses[0].response.payload;
+		let result = null;
+		if (validResponses[0].response.payload && validResponses[0].response.payload.length > 0) {
+			result = validResponses[0].response.payload;
+		}
+		return result;
 
 	}
 }
