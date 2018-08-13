@@ -24,12 +24,22 @@ let HSMSuite = new Map();
 
 class HSMWalletMixin extends WalletMixin {
 
+	static createX509Identity(mspId, certificate) {
+		return {
+			type: 'HSMX509',
+			mspId,
+			certificate
+		};
+	}
+
+
 	static clearHSMCache() {
 		HSMSuite.clear();
 	}
 
 	static closeDown() {
-		let suite = HSMSuite.values().next().value;
+		//TODO: needs work
+		const suite = HSMSuite.values().next().value;
 		suite.closeSession();
 		suite.finalize();
 	}
@@ -44,8 +54,8 @@ class HSMWalletMixin extends WalletMixin {
 		this.cryptoSuite = null;
 	}
 
-	setupKeyStore(client, label) {
-		let key = '' + this.slot + '-' + this.pin;
+	getCryptoSuite(label, keyValStoreClass) {
+		const key = '' + this.slot + '-' + this.pin;
 		this.cryptoSuite = HSMSuite.get(key);
 		if (!this.cryptoSuite) {
 			this.cryptoSuite = Client.newCryptoSuite({ software: false, lib: this.library, slot: this.slot, pin: this.pin, usertype: this.usertype });
@@ -54,24 +64,44 @@ class HSMWalletMixin extends WalletMixin {
 			this.cryptoSuite.setCryptoKeyStore(Client.newCryptoKeyStore({path: '/tmp'}));
 			HSMSuite.set(key, this.cryptoSuite);
 		}
-		client.setCryptoSuite(this.cryptoSuite);
+		return this.cryptoSuite;
 	}
 
-	async createCryptoContent(publicCert, privateKey) {
-		let cryptoContent = {
-			signedCertPEM: publicCert
+	// so similar to X509, can we do something about it ?
+	async importIdentity(client, label, identity) {
+		// check the identity type
+		const cryptoContent = {
+			signedCertPEM: identity.certificate
 		};
-		let publicKey = KEYUTIL.getKey(publicCert);
-		let ecdsakey = new ecdsaKey(publicKey);
+		const publicKey = KEYUTIL.getKey(identity.certificate);
+		const ecdsakey = new ecdsaKey(publicKey);
 		cryptoContent.privateKeyObj = await this.cryptoSuite.getKey(Buffer.from(ecdsakey.getSKI(), 'hex'));
+
+		await client.createUser(
+			{
+				username: label,
+				mspid: identity.mspId,
+				cryptoContent: cryptoContent
+			});
+
 		return cryptoContent;
+
+
 	}
 
-	exportCryptoContent(user) {
-		return {
-			certificate: user.getIdentity()._certificate
-		};
+	// so similar to X509 can we do something about it.
+	async exportIdentity(client, label) {
+		const user = await client.getUserContext(label, true);
+		let result = null;
+		if (user) {
+			result = HSMWalletMixin.createX509Identity(
+				user._mspId,
+				user.getIdentity()._certificate
+			);
+		}
+		return result;
 	}
+
 
 }
 

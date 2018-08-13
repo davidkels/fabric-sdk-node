@@ -16,26 +16,27 @@
 'use strict';
 
 const Client = require('fabric-client');
+const X509WalletMixin = require('../impl/wallet/x509walletmixin');
 
-class Wallet  {
+class BaseWallet {
 
-	static createX509Identity(certificate, privateKey) {
-		return {
-			type: 'X509',
-			certificate,
-			privateKey
-		};
-	}
-
-	constructor() {
+	constructor(keyValStoreClass, mixin) {
 		this.storesInitialized = false;
-		this.KeyWalletMixin = null;
+		this.keyValStoreClass = keyValStoreClass;
+		if (!mixin) {
+			this.keyWalletMixin = new X509WalletMixin();
+		}
 	}
 
-	setKeyWalletMixin(walletMixin) {
+	setWalletMixin(walletMixin) {
 		//TODO: perform some validation
 		this.keyWalletMixin = walletMixin;
 	}
+
+
+	// ===============================================
+	// SPI Methods
+	// ===============================================
 
 	/**
 	 * End users of a wallet don't make use of this method, this method is for use by the
@@ -64,74 +65,50 @@ class Wallet  {
 			client = new Client();
 		}
 
-		await this.setupStateStore(client, label);
-		if (this.keyWalletMixin && this.keyWalletMixin.setupKeyStore) {
-			this.keyWalletMixin.setupKeyStore(client, label);
-		} else {
-			this.setupKeyStore(client, label);
+		const store = await this.getStateStore(label);
+		client.setStateStore(store);
+
+		let cryptoSuite;
+		if (this.keyWalletMixin && this.keyWalletMixin.getCryptoSuite) {
+			cryptoSuite = await this.keyWalletMixin.getCryptoSuite(label, this.KeyValStoreClass);
 		}
+
+		if (!cryptoSuite) {
+			cryptoSuite = await this.getCryptoSuite(label);
+		}
+		client.setCryptoSuite(cryptoSuite);
 		return client;
 	}
 
-	normalizeLabel(label) {
-		return label;
-	}
+	//========================================
+	// The following 2 apis are implemented to
+	// provide the persistence mechanism
+	// a mixin can override the getCryptoSuite
+	//========================================
 
-	async setupStateStore(client, label) {
+	async setupStateStore(label) {
 		throw new Error('Unimplemented');
 	}
 
-	async setupKeyStore(client, label) {
+	async getCryptoSuite(label) {
 		throw new Error('Unimplemented');
 	}
 
-	async _createCryptoContent(certificate, privateKey) {
-		if (this.keyWalletMixin && this.keyWalletMixin.createCryptoContent) {
-			return await this.keyWalletMixin.createCryptoContent(certificate, privateKey);
-		}
 
-		const cryptoContent = {
-			signedCertPEM: certificate,
-			privateKeyPEM: privateKey
-		};
+	//=========================================================
+	// End user APIs
+	//=========================================================
 
-		return cryptoContent;
-
-	}
-
-	async import(label, mspId, certificate, privateKey = null) {
+	async import(label, identity) {
 
 		// this changes the user context of the client
 		label = this.normalizeLabel(label);
 		const client = await this.configureClientStores(null, label);
-
-		const cryptoContent = await this._createCryptoContent(certificate, privateKey);
-
-		await client.createUser(
-			{
-				username: label,
-				mspid: mspId,
-				cryptoContent: cryptoContent
-			});
-	}
-
-	async update(label, certificate, privateKey = null) {
-		throw new Error('Unimplemented');
-	}
-
-	async delete(label) {
-		throw new Error('Unimplemented');
-	}
-
-	_exportCryptoContent(user) {
-		if (this.keyWalletMixin && this.keyWalletMixin.exportCryptoContent) {
-			return this.keyWalletMixin.exportCryptoContent(user);
+		if (this.keyWalletMixin && this.keyWalletMixin.importIdentity) {
+			return await this.keyWalletMixin.importIdentity(client, label, identity);
+		} else {
+			throw new Error('no cryptocontent method exists');
 		}
-
-		return {
-			certificate: user.getIdentity()._certificate,
-			privateKey: user.getSigningIdentity()._signer._key.toBytes()
-		};
 	}
 
 	async export(label) {
@@ -140,13 +117,31 @@ class Wallet  {
 		// had loaded a user directly into the stores. Here we aren't allowing that.
 		label = this.normalizeLabel(label);
 		const client = await this.configureClientStores(null, label);
-
-		const user = await client.getUserContext(label, true);
-		let result = null;
-		if (user) {
-			result = this._exportCryptoContent(user);
+		if (this.keyWalletMixin && this.keyWalletMixin.exportIdentity) {
+			return await this.keyWalletMixin.exportIdentity(client, label);
+		} else {
+			throw new Error('no export cryptoContnet exists');
 		}
-		return result;
+	}
+
+	async update(label, identity) {
+		if (await this.exists(label)) {
+			await this.delete(label);
+			await this.import(label, identity);
+		} else {
+			throw new Error('identity does not exist');
+		}
+	}
+
+	// These are specific to the persistence implementation as the key/value stores
+	// don't provide any support for this
+	normalizeLabel(label) {
+		// this is unlikely to be a sensible value to return.
+		return label;
+	}
+
+	async delete(label) {
+		throw new Error('Unimplemented');
 	}
 
 	async exists(label) {
@@ -159,4 +154,5 @@ class Wallet  {
 
 }
 
-module.exports = Wallet;
+module.exports = BaseWallet;
+

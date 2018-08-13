@@ -17,15 +17,18 @@
 
 class WalletMixin  {
 
-	setupKeyStore(client, label) {
+	// Implementing this is optional if a mixin wants to handle
+	// the management of the keystore
+	//getCryptoSuite(label, keyValStoreClass) {
+	//}
+
+	async importIdentity(client, identity) {
+		// has to be implemented
 		throw new Error('not implemented');
 	}
 
-	async createCryptoContent(publicCert, privateKey) {
-		throw new Error('not implemented');
-	}
-
-	exportCryptoContent(user) {
+	async exportIdentity(client, label) {
+		// has to be implemented
 		throw new Error('not implemented');
 	}
 }

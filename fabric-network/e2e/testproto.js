@@ -6,7 +6,7 @@
 // export CRYPTO_PKCS11_SLOT="0"
 
 // CouchDBWallet, EventHandlerConstants also available
-const {Network, IDManager, FileSystemWallet, InMemoryWallet, HSMWalletMixin} = require('..');
+const {Network, IDManager, FileSystemWallet, InMemoryWallet, HSMWalletMixin, X509WalletMixin} = require('..');
 
 const fs = require('fs');
 
@@ -20,7 +20,7 @@ const fs = require('fs');
 	let hsmwallet;
 	if (testHSM) {
 		hsmwallet = new FileSystemWallet('./WALLETS/hsmwallet');
-		hsmwallet.setKeyWalletMixin(new HSMWalletMixin());
+		hsmwallet.setWalletMixin(new HSMWalletMixin());
 	}
 
 	//const couchdbwallet = new CouchDBWallet({url: 'http://localhost:5984'});
@@ -30,7 +30,7 @@ const fs = require('fs');
 	// load crypto material into the in memory wallet
 	const cert = fs.readFileSync('./dave/cert.pem').toString();
 	const key = fs.readFileSync('./dave/key.pem').toString();
-	await inMemoryWallet.import('dave', 'Org1MSP', cert, key);
+	await inMemoryWallet.import('dave', X509WalletMixin.createIdentity('Org1MSP', cert, key));
 	const exists = await inMemoryWallet.exists('dave');
 	console.log('Dave exists:', exists);
 
@@ -97,6 +97,8 @@ const fs = require('fs');
 			await idManager.enrollToWallet('admin', 'adminpw', 'Org1MSP', wallet);
 			// now that there are some identities in the wallet, we can tell the network(s) to use them
 		}
+		const id = await wallet.export('admin');
+		console.log('exported x509 identity', id);
 		await network.setIdentity('admin');
 
 		// see if HSMUser is in the HSM filesystem wallet, and if not register one assuming it has never been registered otherwise
@@ -110,6 +112,8 @@ const fs = require('fs');
 				console.log(hsmUser, '=', secret);
 				await idManager.enrollToWallet(hsmUser, secret, 'Org1MSP', hsmwallet);
 			}
+			const id = await hsmwallet.export(hsmUser);
+			console.log('exported hsm identity', id);
 			// now that there are some identities in the wallet, we can tell the network(s) to use them
 			await hsmNetwork.setIdentity(hsmUser);
 		}
@@ -174,7 +178,8 @@ const fs = require('fs');
 
 			if (testHSM) {
 				console.log('---> start testing network with hsm identity:');
-				contract = await hsmNetwork.getContract('composerchannel', 'demo');
+				channel = await hsmNetwork.getChannel('composerchannel');
+				contract = await channel.getContract('demo');
 				response = await contract.submitTransaction('invoke', ['key1', 'key2', '50']);
 				console.log('got response: ' + response);
 				console.log('<--- finish testing network with hsm identity:');

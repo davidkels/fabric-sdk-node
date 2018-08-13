@@ -19,28 +19,29 @@ const Client = require('fabric-client');
 const rimraf = require('rimraf');
 const fs = require('fs');
 const Path = require('path');
-const Wallet = require('../../api/wallet');
+const BaseWallet = require('../../api/basewallet');
+const FileKVS = require('fabric-client/lib/impl/FileKeyValueStore');
 
-class FileSystemWallet extends Wallet {
+class FileSystemWallet extends BaseWallet {
 
 
 	// TODO: assumption
 	constructor(path) {
-		super();
+		super(FileKVS);
 		this.path = path;
 	}
 
-	async setupStateStore(client, label) {
+	async getStateStore(label) {
 		const partitionedPath = Path.join(this.path, label);
-		const store = await Client.newDefaultKeyValueStore({path: partitionedPath});
-		client.setStateStore(store);
+		const store = await new FileKVS({path: partitionedPath});
+		return store;
 	}
 
-	setupKeyStore(client, label) {
+	getCryptoSuite(label) {
 		const partitionedPath = Path.join(this.path, label);
 		const cryptoSuite = Client.newCryptoSuite();
 		cryptoSuite.setCryptoKeyStore(Client.newCryptoKeyStore({path: partitionedPath}));
-		client.setCryptoSuite(cryptoSuite);
+		return cryptoSuite;
 	}
 
 	async delete(label) {

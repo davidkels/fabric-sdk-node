@@ -16,29 +16,28 @@
 'use strict';
 
 const Client = require('fabric-client');
-const Wallet = require('../../api/wallet');
+const BaseWallet = require('../../api/basewallet');
 const api = require('fabric-client/lib/api.js');
-
 
 const memoryStore = new Map();
 
-class InMemoryWallet extends Wallet {
+class InMemoryWallet extends BaseWallet {
 
 
-	// TODO: assumption
 	constructor() {
-		super();
+		//TODO: need a unique prefix to avoid multiple in memory wallet clashes
+		super(InMemoryKVS);
 	}
 
-	async setupStateStore(client, label) {
+	async getStateStore(label) {
 		const store = await new InMemoryKVS(label);
-		client.setStateStore(store);
+		return store;
 	}
 
-	setupKeyStore(client, label) {
+	getCryptoSuite(label) {
 		const cryptoSuite = Client.newCryptoSuite();
 		cryptoSuite.setCryptoKeyStore(Client.newCryptoKeyStore(InMemoryKVS, label));
-		client.setCryptoSuite(cryptoSuite);
+		return cryptoSuite;
 	}
 
 	async delete(label) {

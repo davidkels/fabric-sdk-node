@@ -15,9 +15,17 @@
 */
 
 module.exports.Network = require('./lib/network');
-module.exports.IDManager = require('./lib/idmanager');
+module.exports.IDManager = require('./lib/idmanager');  // will go
+
 module.exports.FileSystemWallet = require('./lib/impl/wallet/filesystemwallet');
 module.exports.InMemoryWallet = require('./lib/impl/wallet/inmemorywallet');
 module.exports.HSMWalletMixin = require('./lib/impl/wallet/hsmwalletmixin');
+module.exports.X509WalletMixin = require('./lib/impl/wallet/x509walletmixin');
 module.exports.CouchDBWallet = require('./lib/impl/wallet/couchdbwallet');
+
 module.exports.EventHandlerConstants = require('./lib/impl/event/defaulteventstrategies');
+
+module.exports.BaseWallet = require('./lib/api/basewallet');
+module.exports.BaseWallet = require('./lib/api/eventhandler');
+module.exports.BaseWallet = require('./lib/api/query');
+module.exports.BaseWallet = require('./lib/api/walletmixin');

@@ -17,16 +17,16 @@
 
 const Client = require('fabric-client');
 const CouchDBKVStore = require('fabric-client/lib/impl/CouchDBKeyValueStore');
-const Wallet = require('../../api/wallet');
+const BaseWallet = require('../../api/basewallet');
 const Nano = require('nano');
 
-class CouchDBWallet extends Wallet {
+class CouchDBWallet extends BaseWallet {
 
 
 	// TODO: assumption
 	// {url: 'http://localhost:5984'}
 	constructor(options) {
-		super();
+		super(CouchDBKVStore);
 		this.options = options;
 		this.couch = Nano(options.url);
 		this.dbOptions = {};
@@ -40,19 +40,15 @@ class CouchDBWallet extends Wallet {
 		return dbOptions;
 	}
 
-	async setupStateStore(label) {
+	async getStateStore(label) {
 		const store = await new CouchDBKVStore(this._createOptions(label));
-		this.client.setStateStore(store);
+		return store;
 	}
 
-	setupKeyStore(label) {
+	getCryptoSuite(label) {
 		const cryptoSuite = Client.newCryptoSuite();
 		cryptoSuite.setCryptoKeyStore(Client.newCryptoKeyStore(CouchDBKVStore, this._createOptions(label)));
 		this.client.setCryptoSuite(cryptoSuite);
-	}
-
-	async update(label, certificate, privateKey = null) {
-		throw new Error('Unimplemented');
 	}
 
 	async delete(label) {
