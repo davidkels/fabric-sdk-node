@@ -15,10 +15,7 @@
 */
 'use strict';
 
-//const Client = require('fabric-client');
-const WalletMixin = require('../../api/walletmixin');
-
-class X509WalletMixin extends WalletMixin {
+class X509WalletMixin {
 
 	static createIdentity(mspId, certificate, privateKey) {
 		return {
@@ -42,8 +39,6 @@ class X509WalletMixin extends WalletMixin {
 				mspid: identity.mspId,
 				cryptoContent: cryptoContent
 			});
-
-		return cryptoContent;
 	}
 
 	async exportIdentity(client, label) {
@@ -59,6 +54,18 @@ class X509WalletMixin extends WalletMixin {
 		return result;
 	}
 
+	async getIdentityInfo(client, label) {
+		const user = await client.getUserContext(label, true);
+		let result = null;
+		if (user) {
+			result = {
+				label,
+				mspId: user._mspId,
+				identifier: user.getIdentity()._publicKey.getSKI()
+			};
+		}
+		return result;
+	}
 }
 
 module.exports = X509WalletMixin;

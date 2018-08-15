@@ -25,7 +25,7 @@ module.exports.CouchDBWallet = require('./lib/impl/wallet/couchdbwallet');
 
 module.exports.EventHandlerConstants = require('./lib/impl/event/defaulteventstrategies');
 
-module.exports.BaseWallet = require('./lib/api/basewallet');
-module.exports.BaseWallet = require('./lib/api/eventhandler');
-module.exports.BaseWallet = require('./lib/api/query');
-module.exports.BaseWallet = require('./lib/api/walletmixin');
+module.exports.Wallet = require('./lib/api/wallet');
+module.exports.EventHandlerFactory = require('./lib/api/eventhandler').EventHandlerFactory;
+module.exports.TxEventHandler = require('./lib/api/eventhandler').TxEventHandler;
+module.exports.QueryHandler = require('./lib/api/queryhandler');

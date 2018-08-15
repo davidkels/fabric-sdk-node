@@ -99,6 +99,12 @@ const fs = require('fs');
 		}
 		const id = await wallet.export('admin');
 		console.log('exported x509 identity', id);
+		console.log('listing all identities in a wallet');
+		const idInfoList = await wallet.list();
+		console.log(idInfoList);
+		for (const idInfo of idInfoList) {
+			console.log(`name=${idInfo.label}, mspId=${idInfo.mspId}, identifier=${idInfo.identifier}`);
+		}
 		await network.setIdentity('admin');
 
 		// see if HSMUser is in the HSM filesystem wallet, and if not register one assuming it has never been registered otherwise

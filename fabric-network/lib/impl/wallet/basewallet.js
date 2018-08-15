@@ -16,21 +16,20 @@
 'use strict';
 
 const Client = require('fabric-client');
-const X509WalletMixin = require('../impl/wallet/x509walletmixin');
+const X509WalletMixin = require('./x509walletmixin');
+const Wallet = require('../../api/wallet');
 
-class BaseWallet {
+class BaseWallet extends Wallet {
 
-	constructor(keyValStoreClass, mixin) {
+	constructor(walletMixin = new X509WalletMixin()) {
+		super();
 		this.storesInitialized = false;
-		this.keyValStoreClass = keyValStoreClass;
-		if (!mixin) {
-			this.keyWalletMixin = new X509WalletMixin();
-		}
+		this.walletMixin = walletMixin;
 	}
 
 	setWalletMixin(walletMixin) {
 		//TODO: perform some validation
-		this.keyWalletMixin = walletMixin;
+		this.walletMixin = walletMixin;
 	}
 
 
@@ -48,6 +47,7 @@ class BaseWallet {
 	 * @memberof Wallet
 	 */
 	async setUserContext(client, label) {
+		label = this.normalizeLabel(label);
 
 		//TODO: We could check the client to see if the context matches what we would load ?
 		//Although this may be complex to do, maybe we could cache the previous label and
@@ -61,6 +61,7 @@ class BaseWallet {
 	}
 
 	async configureClientStores(client, label) {
+		label = this.normalizeLabel(label);
 		if (!client) {
 			client = new Client();
 		}
@@ -69,8 +70,8 @@ class BaseWallet {
 		client.setStateStore(store);
 
 		let cryptoSuite;
-		if (this.keyWalletMixin && this.keyWalletMixin.getCryptoSuite) {
-			cryptoSuite = await this.keyWalletMixin.getCryptoSuite(label, this.KeyValStoreClass);
+		if (this.walletMixin && this.walletMixin.getCryptoSuite) {
+			cryptoSuite = await this.walletMixin.getCryptoSuite(label, this);
 		}
 
 		if (!cryptoSuite) {
@@ -86,7 +87,7 @@ class BaseWallet {
 	// a mixin can override the getCryptoSuite
 	//========================================
 
-	async setupStateStore(label) {
+	async getStateStore(label) {
 		throw new Error('Unimplemented');
 	}
 
@@ -94,51 +95,74 @@ class BaseWallet {
 		throw new Error('Unimplemented');
 	}
 
+	// if this is overridden, then it has to be bi-directional
+	// for the list to work properly.
+	normalizeLabel(label) {
+		return label;
+	}
 
 	//=========================================================
 	// End user APIs
 	//=========================================================
 
-	async import(label, identity) {
+	//=========================================================
+	// Mixins provide support for import & export
+	//=========================================================
 
-		// this changes the user context of the client
+	async import(label, identity) {
 		label = this.normalizeLabel(label);
 		const client = await this.configureClientStores(null, label);
-		if (this.keyWalletMixin && this.keyWalletMixin.importIdentity) {
-			return await this.keyWalletMixin.importIdentity(client, label, identity);
+		if (this.walletMixin && this.walletMixin.importIdentity) {
+			return await this.walletMixin.importIdentity(client, label, identity);
 		} else {
-			throw new Error('no cryptocontent method exists');
+			throw new Error('no import method exists');
 		}
 	}
 
 	async export(label) {
-
-		// TODO: Do we need export? The only reason we needed it for composer was the auto enrollment capability where we
-		// had loaded a user directly into the stores. Here we aren't allowing that.
 		label = this.normalizeLabel(label);
 		const client = await this.configureClientStores(null, label);
-		if (this.keyWalletMixin && this.keyWalletMixin.exportIdentity) {
-			return await this.keyWalletMixin.exportIdentity(client, label);
+		if (this.walletMixin && this.walletMixin.exportIdentity) {
+			return await this.walletMixin.exportIdentity(client, label);
 		} else {
-			throw new Error('no export cryptoContnet exists');
+			throw new Error('no export method exists');
 		}
 	}
 
-	async update(label, identity) {
-		if (await this.exists(label)) {
-			await this.delete(label);
-			await this.import(label, identity);
-		} else {
-			throw new Error('identity does not exist');
+	//=========================================================
+	// Wallets combined with mixins provide support for list
+	//=========================================================
+
+	async list() {
+		const idInfoList = [];
+		const labelList = await this.getAllLabels();  // these need to be denormalised
+		if (labelList && labelList.length > 0 && this.walletMixin && this.walletMixin.getIdentityInfo) {
+			for (const label of labelList) {
+				const client = await this.configureClientStores(null, label);
+				const idInfo = await this.walletMixin.getIdentityInfo(client, label);
+				if (idInfo) {
+					idInfoList.push(idInfo);
+				}
+				else {
+					idInfoList.push({
+						label,
+						mspId: 'not provided',
+						identifier: 'not provided'
+					});
+				}
+			}
 		}
+		return idInfoList;
 	}
 
-	// These are specific to the persistence implementation as the key/value stores
-	// don't provide any support for this
-	normalizeLabel(label) {
-		// this is unlikely to be a sensible value to return.
-		return label;
+	async getAllLabels() {
+		return null;
 	}
+
+	//=========================================================
+	// Wallets provide support for delete and exists
+	//=========================================================
+
 
 	async delete(label) {
 		throw new Error('Unimplemented');
@@ -148,10 +172,9 @@ class BaseWallet {
 		throw new Error('Unimplemented');
 	}
 
-	async list(hint = null) {
-		throw new Error('Unimplemented');
-	}
-
+	//TODO: FUTURE: Need some sort of api for a mixin to call to be able to integrate correctly
+	//with the specific persistence mechanism if it wants to use the same persistence
+	//feature
 }
 
 module.exports = BaseWallet;

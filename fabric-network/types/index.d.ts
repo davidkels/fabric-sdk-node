@@ -2,9 +2,6 @@ import {Channel, User, ChannelEventHub, TransactionId, ICryptoKey} from 'fabric-
 import { EventEmitter } from 'events';
 import Client = require('fabric-client');
 
-// workaround as client isn't exported from fabric-client and it should be
-//type Client = any;
-
 declare namespace FabricNetwork {
 
 	export interface InitOptions {
@@ -27,8 +24,6 @@ declare namespace FabricNetwork {
 	//-------------------------------------------
 	export class Network {
 		constructor();
-
-		// is this how we want to initialise based on ccp or Client ?
 		initialize(ccp: string | Client, options?: InitOptions): Promise<void>;
 		setIdentity(newIdentity: string): Promise<void>;
 		getCurrentIdentity(): User;
@@ -41,7 +36,7 @@ declare namespace FabricNetwork {
 	export class Channel {
 		initialize(): Promise<void>;
 		getInternalChannel(): Channel;
-		getPeerMap(): Map<string, any>; // TODO: any is not right
+		getPeerMap(): Map<string, Client.Peer[]>;
 		rediscover(): Promise<void>;
 		getContract(chaincodeId: string): Contract;
 		// array of mapped by mspid ?
@@ -62,82 +57,91 @@ declare namespace FabricNetwork {
 		type: string
 	}
 
-	export interface X509Identity extends Identity {
-		certificate: string,
-		privateKey?: string
+	export interface HSMX509Identity extends Identity {
+		mspId: string,
+		certificate: string
 	}
 
-	export interface CryptoContent {
-			signedCertPEM: string,
-			privateKeyPEM?: string,
-			privateKeyObj?: ICryptoKey
+	export interface X509Identity extends HSMX509Identity {
+		privateKey: string
 	}
 
-	export interface WalletProvider {
-		normalizeLabel(label: string): string;
-		setupStateStore(client: Client, label: string): Promise<void>;
-		setupKeyStore(client: Client, label: string): Promise<void>;
+	export interface IdentityInformation {
+		label: string,
+		mspId: string,
+		identifier: string
 	}
 
-	// TODO: only specific to X509, what about idemix ?
-	export abstract class Wallet implements WalletProvider {
-		//Wallet User
-		import(label: string, mspId: string, certificate: string, privateKey?: string): Promise<void>;
-		export(label: string): Promise<X509Identity>;
-		abstract update(label: string, certificate: string, privateKey?: string): Promise<void>;
-		abstract delete(label: string): Promise<void>;
-		abstract list(): Promise<any>;  // Todo what should list provide ?
-		abstract exists(label: string): Promise<boolean>;
-		setKeyWalletMixin(walletMixin: WalletMixin): void;
 
-		// WalletProvider
-		normalizeLabel(label: string): string;
-		abstract setupStateStore(client: Client, label: string): Promise<void>;
-		abstract setupKeyStore(client: Client, label: string): Promise<void>;
+	export interface WalletAPI {
+		import(label: string, identity: Identity): Promise<void>;
+		export(label: string): Promise<Identity>;
+		list(): Promise<IdentityInformation>;
+		delete(label: string): Promise<void>;
+		exists(label: string): Promise<boolean>;
+	}
+
+	export interface WalletSPI {
+		setUserContext(client: Client, label: string): Promise<void>;
+		configureClientStores(client: Client, label: string): Promise<void>;
+	}
+
+	export interface Wallet extends WalletAPI, WalletSPI {
 	}
 
 	export interface WalletMixin {
-		setupKeyStore(client: Client, label: string): void;
-		createCryptoContent(publicCert: string, privateKey: string): Promise<CryptoContent>;
-		exportCryptoContent(user: User): X509Identity;
+	}
+
+	export abstract class BaseWallet implements Wallet {
+		import(label: string, identity: Identity): Promise<void>;
+		export(label: string): Promise<Identity>;
+		list(): Promise<IdentityInformation>;
+		abstract delete(label: string): Promise<void>;
+		abstract exists(label: string): Promise<boolean>;
+
+		setUserContext(client: Client, label: string): Promise<void>;
+		configureClientStores(client: Client, label: string): Promise<void>;
+		setWalletMixin(walletMixin: WalletMixin): void;
+		getAllLabels() : Promise<string[]>;
+		normalizeLabel(label: string): string;
+		abstract getStateStore(client: Client, label: string): Promise<void>;
+		abstract getCryptoSuite(client: Client, label: string): Promise<void>;
 	}
 
 	// Real usable Wallet implementations
-	export class InMemoryWallet extends Wallet {
-		update(label: string, certificate: string, privateKey?: string): Promise<void>;
+	export class InMemoryWallet extends BaseWallet {
 		delete(label: string): Promise<void>;
-		list(): Promise<any>;  // Todo what should list provide ?
 		exists(label: string): Promise<boolean>;
-		setupStateStore(client: Client, label: string): Promise<void>;
-		setupKeyStore(client: Client, label: string): Promise<void>;
+		getStateStore(client: Client, label: string): Promise<void>;
+		getCryptoSuite(client: Client, label: string): Promise<void>;
 	}
 
-	export class FileSystemWallet extends Wallet {
+	export class FileSystemWallet extends BaseWallet {
 		constructor(path: string);
-		update(label: string, certificate: string, privateKey?: string): Promise<void>;
 		delete(label: string): Promise<void>;
-		list(): Promise<any>;  // Todo what should list provide ?
 		exists(label: string): Promise<boolean>;
-		setupStateStore(client: Client, label: string): Promise<void>;
-		setupKeyStore(client: Client, label: string): Promise<void>;
+		getStateStore(client: Client, label: string): Promise<void>;
+		getCryptoSuite(client: Client, label: string): Promise<void>;
 	}
 
-	export class CouchDBWallet extends Wallet {
+	export class CouchDBWallet extends BaseWallet {
 		constructor(options: any); // TODO: need to define the option format here
-		update(label: string, certificate: string, privateKey?: string): Promise<void>;
 		delete(label: string): Promise<void>;
-		list(): Promise<any>;  // Todo what should list provide ?
 		exists(label: string): Promise<boolean>;
-		setupStateStore(client: Client, label: string): Promise<void>;
-		setupKeyStore(client: Client, label: string): Promise<void>;
+		getStateStore(client: Client, label: string): Promise<void>;
+		getCryptoSuite(client: Client, label: string): Promise<void>;
 	}
 
-	export class HSMWalletMixin implements WalletMixin {  // TODO: do we need to declare that it implements WalletMixin ?
+	export class HSMWalletMixin implements WalletMixin {
 		constructor(library: string, slot: number, pin: string, userType: string);
-		setupKeyStore(client: Client, label: string): void;
-		createCryptoContent(publicCert: string, privateKey: string): Promise<any>; // TODO: need a definition
-		exportCryptoContent(user: User): any; // TODO: Need to define the return
+		static createIdentity(mspId: string, certificate: string): HSMX509Identity;
 	}
+
+	export class X509WalletMixin implements WalletMixin {
+		constructor();
+		static createIdentity(mspId: string, certificate: string, privateKey: string): X509Identity;
+	}
+
 
 	//-------------------------------------------
 	// Plugins
@@ -162,14 +166,13 @@ declare namespace FabricNetwork {
 		initalize(): Promise<void>;
 		cleanup(): void;
 		addEventHub(eventHub: ChannelEventHub): void;
-		//TODO: need to consider how this should be returned
-		getEventHubs(): ChannelEventHub[];
+		getEventHubs(): ChannelEventHub[];  // FUTURE: Do we want an eventhub map against mspid ?
 		setEventHubs(availableEventHubs: ChannelEventHub[]): void;
 		checkEventHubs(): void;
 		disconnectEventHubs(): void;
 		abstract createTxEventHandler(txid: string): TxEventHandler;
 
-		// chaincodeEventsEnabled(): boolean;
+		//chaincodeEventsEnabled(): boolean;
 		//abstract createChaincodeEventHandler(chaincodeId: string, eventName: string): ChaincodeEventHandler;
 		//abstract createBlockEventHandler(): BlockEventHandler;
 	}

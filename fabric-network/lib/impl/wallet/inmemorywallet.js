@@ -16,41 +16,41 @@
 'use strict';
 
 const Client = require('fabric-client');
-const BaseWallet = require('../../api/basewallet');
+const BaseWallet = require('./basewallet');
 const api = require('fabric-client/lib/api.js');
 
+// this will be shared across all instance of a memory wallet, so really an app should
+// only have one instance otherwise if you put 2 different identities with the same
+// label it will overwrite the existing one.
 const memoryStore = new Map();
 
 class InMemoryWallet extends BaseWallet {
 
-
-	constructor() {
-		//TODO: need a unique prefix to avoid multiple in memory wallet clashes
-		super(InMemoryKVS);
-	}
-
 	async getStateStore(label) {
+		label = this.normalizeLabel(label);
 		const store = await new InMemoryKVS(label);
 		return store;
 	}
 
-	getCryptoSuite(label) {
+	async getCryptoSuite(label) {
+		label = this.normalizeLabel(label);
 		const cryptoSuite = Client.newCryptoSuite();
 		cryptoSuite.setCryptoKeyStore(Client.newCryptoKeyStore(InMemoryKVS, label));
 		return cryptoSuite;
 	}
 
 	async delete(label) {
+		label = this.normalizeLabel(label);
 		memoryStore.delete(label);
 	}
 
 	async exists(label) {
+		label = this.normalizeLabel(label);
 		return memoryStore.has(label);
 	}
 
-	async list(hint = null) {
-		//TODO: we could manage
-		throw new Error('Unimplemented');
+	async getAllLabels() {
+		return Array.from(memoryStore.keys());
 	}
 }
 
@@ -69,7 +69,7 @@ class InMemoryKVS extends api.KeyValueStore {
 	}
 
 	async getValue(name) {
-		let idStore = memoryStore.get(this.partitionKey);
+		const idStore = memoryStore.get(this.partitionKey);
 		if (!idStore) {
 			return null;
 		}

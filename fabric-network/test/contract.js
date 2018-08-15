@@ -22,7 +22,7 @@ const ChannelEventHub = require('fabric-client/lib/ChannelEventHub');
 const TransactionID = require('fabric-client/lib/TransactionID.js');
 const FABRIC_CONSTANTS = require('fabric-client/lib/Constants');
 const User = require('fabric-client/lib/User.js');
-const QueryHandler = require('../lib/api/query');
+const QueryHandler = require('../lib/api/queryhandler');
 
 const chai = require('chai');
 const should = chai.should();

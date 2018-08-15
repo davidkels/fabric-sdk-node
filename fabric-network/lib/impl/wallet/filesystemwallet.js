@@ -17,9 +17,9 @@
 
 const Client = require('fabric-client');
 const rimraf = require('rimraf');
-const fs = require('fs');
+const fs = require('fs-extra');
 const Path = require('path');
-const BaseWallet = require('../../api/basewallet');
+const BaseWallet = require('./basewallet');
 const FileKVS = require('fabric-client/lib/impl/FileKeyValueStore');
 
 class FileSystemWallet extends BaseWallet {
@@ -27,26 +27,42 @@ class FileSystemWallet extends BaseWallet {
 
 	// TODO: assumption
 	constructor(path) {
-		super(FileKVS);
+		super();
 		this.path = path;
 	}
 
-	async getStateStore(label) {
+	_getPartitionedPath(label) {
+		label = this.normalizeLabel(label);
 		const partitionedPath = Path.join(this.path, label);
+		return partitionedPath;
+	}
+
+	async getStateStore(label) {
+		const partitionedPath = this._getPartitionedPath(label);
 		const store = await new FileKVS({path: partitionedPath});
 		return store;
 	}
 
-	getCryptoSuite(label) {
-		const partitionedPath = Path.join(this.path, label);
+	async getCryptoSuite(label) {
+		const partitionedPath = this._getPartitionedPath(label);
 		const cryptoSuite = Client.newCryptoSuite();
 		cryptoSuite.setCryptoKeyStore(Client.newCryptoKeyStore({path: partitionedPath}));
 		return cryptoSuite;
 	}
 
+	async getAllLabels() {
+		const fileList = await fs.readdir(this.path);
+		if (fileList && fileList.length > 0) {
+			const dirList = fileList.filter(async (file) => {
+				return await fs.lstat(Path.join(this.path, file)).isDirectory();
+			});
+			return dirList;
+		}
+		return null;
+	}
+
 	async delete(label) {
-		label = FileSystemWallet.normalizeLabel(label);
-		const partitionedPath = Path.join(this.path, label);
+		const partitionedPath = this._getPartitionedPath(label);
 		return new Promise((resolve, reject) => {
 			rimraf(partitionedPath, (err) => {
 				if (err) {
@@ -58,14 +74,9 @@ class FileSystemWallet extends BaseWallet {
 	}
 
 	async exists(label) {
-		const partitionedPath = Path.join(this.path, label, label);
-		const exists = fs.existsSync(partitionedPath);
+		const partitionedPath = this._getPartitionedPath(label);
+		const exists = await fs.exists(partitionedPath);
 		return exists;
-	}
-
-	async list(hint = null) {
-		//TODO: we could manage
-		throw new Error('Unimplemented');
 	}
 }
 

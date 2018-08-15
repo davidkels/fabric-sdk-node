@@ -97,7 +97,6 @@ class EventHandlerFactory {
 
 class TxEventHandler {
 
-
 	/**
      * Start listening for events.
      */

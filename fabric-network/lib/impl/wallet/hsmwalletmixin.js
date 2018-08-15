@@ -18,13 +18,12 @@
 const Client = require('fabric-client');
 const {KEYUTIL} = require('jsrsasign');
 const ecdsaKey = require('fabric-client/lib/impl/ecdsa/key.js');
-const WalletMixin = require('../../api/walletmixin');
 
 let HSMSuite = new Map();
 
-class HSMWalletMixin extends WalletMixin {
+class HSMWalletMixin {
 
-	static createX509Identity(mspId, certificate) {
+	static createIdentity(mspId, certificate) {
 		return {
 			type: 'HSMX509',
 			mspId,
@@ -38,15 +37,14 @@ class HSMWalletMixin extends WalletMixin {
 	}
 
 	static closeDown() {
-		//TODO: needs work
-		const suite = HSMSuite.values().next().value;
-		suite.closeSession();
-		suite.finalize();
+		for (const suite of HSMSuite.values()) {
+			suite.closeSession();
+			suite.finalize();
+		}
 	}
 
 	// can either pass values on construction, or let sdk pick up info from env vars
 	constructor(library = null, slot = null, pin = null, usertype = null) {
-		super();
 		this.library = library;
 		this.slot = slot ? slot * 1 : null;
 		this.pin = pin ? pin + '' : null;
@@ -54,7 +52,7 @@ class HSMWalletMixin extends WalletMixin {
 		this.cryptoSuite = null;
 	}
 
-	getCryptoSuite(label, keyValStoreClass) {
+	getCryptoSuite(label, wallet) {
 		const key = '' + this.slot + '-' + this.pin;
 		this.cryptoSuite = HSMSuite.get(key);
 		if (!this.cryptoSuite) {
@@ -84,9 +82,6 @@ class HSMWalletMixin extends WalletMixin {
 				cryptoContent: cryptoContent
 			});
 
-		return cryptoContent;
-
-
 	}
 
 	// so similar to X509 can we do something about it.
@@ -94,7 +89,7 @@ class HSMWalletMixin extends WalletMixin {
 		const user = await client.getUserContext(label, true);
 		let result = null;
 		if (user) {
-			result = HSMWalletMixin.createX509Identity(
+			result = HSMWalletMixin.createIdentity(
 				user._mspId,
 				user.getIdentity()._certificate
 			);
@@ -102,7 +97,18 @@ class HSMWalletMixin extends WalletMixin {
 		return result;
 	}
 
-
+	async getIdentityInfo(client, label) {
+		const user = await client.getUserContext(label, true);
+		let result = null;
+		if (user) {
+			result = {
+				label,
+				mspId: user._mspId,
+				identifier: user.getIdentity()._publicKey.getSKI()
+			};
+		}
+		return result;
+	}
 }
 
 module.exports = HSMWalletMixin;

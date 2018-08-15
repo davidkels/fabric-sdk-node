@@ -14,7 +14,7 @@
 
 'use strict';
 //const FABRIC_CONSTANTS = require('fabric-client/lib/Constants');
-const QueryHandler = require('../../api/query');
+const QueryHandler = require('../../api/queryhandler');
 
 /**
  * Class to provide intelligence on how to query peers when peers are not available.

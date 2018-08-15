@@ -17,16 +17,15 @@
 
 const Client = require('fabric-client');
 const CouchDBKVStore = require('fabric-client/lib/impl/CouchDBKeyValueStore');
-const BaseWallet = require('../../api/basewallet');
+const BaseWallet = require('./basewallet');
 const Nano = require('nano');
 
+const PREFIX = '$identity_$';
 class CouchDBWallet extends BaseWallet {
 
-
-	// TODO: assumption
 	// {url: 'http://localhost:5984'}
 	constructor(options) {
-		super(CouchDBKVStore);
+		super();
 		this.options = options;
 		this.couch = Nano(options.url);
 		this.dbOptions = {};
@@ -34,9 +33,10 @@ class CouchDBWallet extends BaseWallet {
 	}
 
 	_createOptions(label) {
-		let dbOptions = {};
+		label = this.normalizeLabel(label);
+		const dbOptions = {};
 		Object.assign(dbOptions, this.options);
-		dbOptions.name = 'identity_' + label;
+		dbOptions.name = PREFIX + label;
 		return dbOptions;
 	}
 
@@ -45,19 +45,28 @@ class CouchDBWallet extends BaseWallet {
 		return store;
 	}
 
-	getCryptoSuite(label) {
+	async getCryptoSuite(label) {
 		const cryptoSuite = Client.newCryptoSuite();
 		cryptoSuite.setCryptoKeyStore(Client.newCryptoKeyStore(CouchDBKVStore, this._createOptions(label)));
-		this.client.setCryptoSuite(cryptoSuite);
+		return cryptoSuite;
 	}
 
 	async delete(label) {
-		throw new Error('Unimplemented');
-
+		label = this.normalizeLabel(label);
+		const name = PREFIX + label;
+		return new Promise((resolve, reject) => {
+			this.couch.db.destroy(name, (err) => {
+				if (err === null) {
+					resolve(true);
+				}
+				resolve(false);
+			});
+		});
 	}
 
 	async exists(label) {
-		const name = 'identity_' + label;
+		label = this.normalizeLabel(label);
+		const name = PREFIX + label;
 		return new Promise((resolve, reject) => {
 			this.couch.db.get(name, (err) => {
 				if (err === null) {
@@ -68,9 +77,15 @@ class CouchDBWallet extends BaseWallet {
 		});
 	}
 
-	async list(hint = null) {
-		//TODO: we could manage
-		throw new Error('Unimplemented');
+	async getAllLabels(hint = null) {
+		this.couch.db.list((err, list) => {
+			return list.map((entry) => {
+				if (entry.startsWith(PREFIX)) {
+					return entry.substring(PREFIX.length);
+				}
+			});
+		});
+		return null;
 	}
 }
 
