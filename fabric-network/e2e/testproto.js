@@ -19,8 +19,7 @@ const fs = require('fs');
 
 	let hsmwallet;
 	if (testHSM) {
-		hsmwallet = new FileSystemWallet('./WALLETS/hsmwallet');
-		hsmwallet.setWalletMixin(new HSMWalletMixin());
+		hsmwallet = new FileSystemWallet('./WALLETS/hsmwallet', new HSMWalletMixin());
 	}
 
 	//const couchdbwallet = new CouchDBWallet({url: 'http://localhost:5984'});
@@ -156,7 +155,7 @@ const fs = require('fs');
 			console.log('---> start testing query only network with file system identity:');
 			channel = await queryNetwork.getChannel('composerchannel');
 			contract = await channel.getContract('demo');
-			response = await contract.query('query', ['key1']);
+			response = await contract.executeTransaction('query', ['key1']);
 			console.log('got response: ' + response);
 			console.log('<--- Finish testing query only network with file system identity');
 
@@ -170,7 +169,7 @@ const fs = require('fs');
 			response = await contract.submitTransaction('invoke', ['key1', 'key2', '50']);
 			console.log('got response: ' + response);
 			console.log('testing query');
-			response = await contract.query('query', ['key1']);
+			response = await contract.executeTransaction('query', ['key1']);
 			console.log('got response: ' + response);
 
 			//response = await contract.submitTransaction('invoke', ['key1', 'key2', '50']);
@@ -198,11 +197,11 @@ const fs = require('fs');
 		console.log(error);
 	} finally {
 		console.log('cleaning up');
-		queryNetwork.cleanup();
-		memNetwork.cleanup();
-		network.cleanup();
+		queryNetwork.dispose();
+		memNetwork.dispose();
+		network.dispose();
 		if (testHSM) {
-			hsmNetwork.cleanup();
+			hsmNetwork.dispose();
 			HSMWalletMixin.closeDown();
 		}
 		process.exit(0);  // needed because using HSM causes app to hang at the end.

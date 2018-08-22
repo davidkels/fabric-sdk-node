@@ -24,10 +24,24 @@ const FileKVS = require('fabric-client/lib/impl/FileKeyValueStore');
 
 class FileSystemWallet extends BaseWallet {
 
+	static async _createFileKVS(path) {
+		return await new FileKVS({path});
+	}
 
-	// TODO: assumption
-	constructor(path) {
-		super();
+	static async _isDirectory(label) {
+		try {
+			const stat = await fs.lstat(Path.join(this.path, label));
+			return stat.isDirectory();
+		} catch(err) {
+			return false;
+		}
+	}
+
+	constructor(path, mixin) {
+		if (!path) {
+			throw new Error('No path for wallet has been provided');
+		}
+		super(mixin);
 		this.path = path;
 	}
 
@@ -39,8 +53,7 @@ class FileSystemWallet extends BaseWallet {
 
 	async getStateStore(label) {
 		const partitionedPath = this._getPartitionedPath(label);
-		const store = await new FileKVS({path: partitionedPath});
-		return store;
+		return FileSystemWallet._createFileKVS(partitionedPath);
 	}
 
 	async getCryptoSuite(label) {
@@ -51,14 +64,24 @@ class FileSystemWallet extends BaseWallet {
 	}
 
 	async getAllLabels() {
-		const fileList = await fs.readdir(this.path);
-		if (fileList && fileList.length > 0) {
-			const dirList = fileList.filter(async (file) => {
-				return await fs.lstat(Path.join(this.path, file)).isDirectory();
-			});
-			return dirList;
+		let dirList;
+		const labelList = [];
+		try {
+			dirList = await fs.readdir(this.path);
+		} catch(err) {
+			return [];
 		}
-		return null;
+
+		if (dirList && dirList.length > 0) {
+			for (const label of dirList) {
+				const isDir = await FileSystemWallet._isDirectory(label);
+				const exists = await fs.exists(Path.join(this._getPartitionedPath(label), label));
+				if (isDir && exists) {
+					labelList.push(label);
+				}
+			}
+		}
+		return labelList;
 	}
 
 	async delete(label) {
@@ -66,9 +89,9 @@ class FileSystemWallet extends BaseWallet {
 		return new Promise((resolve, reject) => {
 			rimraf(partitionedPath, (err) => {
 				if (err) {
-					reject(err);
+					resolve(false);
 				}
-				resolve();
+				resolve(true);
 			});
 		});
 	}

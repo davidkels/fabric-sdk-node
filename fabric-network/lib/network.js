@@ -125,6 +125,12 @@ class Network {
 		}
 	}
 
+	setTlsClientCertAndKey(clientCert, clientKey) {
+		if (this.client) {
+			this.client.setTlsClientCertAndKey(clientCert, clientKey);
+		}
+	}
+
 	/**
 	 * Allows you to set the identity after network initialization, may remove.
 	 *
@@ -205,9 +211,9 @@ class Network {
 	 *
 	 * @memberof Network
 	 */
-	cleanup() {
+	dispose() {
 		for (const channel of this.channels.values()) {
-			channel.cleanup();
+			channel._dispose();
 		}
 		this.channels.clear();
 	}
@@ -217,7 +223,7 @@ class Network {
 		if (!existingChannel) {
 			const channel = this.client.getChannel(channelName);
 			const newChannel = new Channel(this, channel);
-			await newChannel.initialize();
+			await newChannel._initialize();
 			this.channels.set(channelName, newChannel);
 			return newChannel;
 		}

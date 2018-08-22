@@ -27,12 +27,6 @@ class BaseWallet extends Wallet {
 		this.walletMixin = walletMixin;
 	}
 
-	setWalletMixin(walletMixin) {
-		//TODO: perform some validation
-		this.walletMixin = walletMixin;
-	}
-
-
 	// ===============================================
 	// SPI Methods
 	// ===============================================
@@ -55,7 +49,7 @@ class BaseWallet extends Wallet {
 		await this.configureClientStores(client, label);
 		const loadedIdentity = await client.getUserContext(label, true);
 		if (!loadedIdentity || !loadedIdentity.isEnrolled()) {
-			throw new Error('identity isn\'t enrolled, or loaded');
+			throw new Error(`identity '${label}' isn't enrolled, or loaded`);
 		}
 		return loadedIdentity;
 	}
@@ -88,11 +82,11 @@ class BaseWallet extends Wallet {
 	//========================================
 
 	async getStateStore(label) {
-		throw new Error('Unimplemented');
+		throw new Error('Not implemented');
 	}
 
 	async getCryptoSuite(label) {
-		throw new Error('Unimplemented');
+		throw new Error('Not implemented');
 	}
 
 	// if this is overridden, then it has to be bi-directional
@@ -165,11 +159,11 @@ class BaseWallet extends Wallet {
 
 
 	async delete(label) {
-		throw new Error('Unimplemented');
+		throw new Error('Not implemented');
 	}
 
 	async exists(label) {
-		throw new Error('Unimplemented');
+		throw new Error('Not implemented');
 	}
 
 	//TODO: FUTURE: Need some sort of api for a mixin to call to be able to integrate correctly

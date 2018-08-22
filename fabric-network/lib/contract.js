@@ -91,7 +91,7 @@ class Contract extends EventEmitter {
      * @param {string[]} parameters transaction parameters
      * @returns {byte[]} payload response
      */
-	async query(transactionName, parameters, txId) {
+	async executeTransaction(transactionName, parameters, txId) {
 		//TODO: Need to check parameters
 		if (!txId) {
 			txId = this.network.getClient().newTransactionID();

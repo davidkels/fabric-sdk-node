@@ -45,6 +45,7 @@ var Chaincode = class {
 	async Invoke(stub) {
 		let ret = stub.getFunctionAndParameters();
 		console.info(ret);
+		console.log(stub.getCreator());
 		let method = this[ret.fcn];
 		if (!method) {
 			console.log('no method of name:' + ret.fcn + ' found');
@@ -70,6 +71,17 @@ var Chaincode = class {
 			throw new Error('asset holding must not be empty');
 		}
 
+/*
+		let it = await stub.getHistoryForKey(A);
+		let next = await it.next();
+		console.log('next', next);
+		console.log('next.value.getTxId', next.value.getTxId());
+		console.log('next.value.getIsDelete', next.value.getIsDelete());
+		let close = await it.close();
+		console.log('close', close);
+		console.log('close.value.getTxId', close.value.getTxId());
+		console.log('close.value.getIsDelete', close.value.getIsDelete());
+*/
 		// Get the state from the ledger
 		let Avalbytes = await stub.getState(A);
 		if (!Avalbytes) {

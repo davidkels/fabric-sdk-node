@@ -107,7 +107,7 @@ class Channel {
 		}
 	}
 
-	async initialize() {
+	async _initialize() {
 		if (this.initialized) {
 			return;
 		}
@@ -167,7 +167,7 @@ class Channel {
 		return [];
 	}
 
-	cleanup() {
+	_dispose() {
 		// Danger as this cached in network, and also async so how would
 		// channel.cleanup() followed by channel.initialize() be safe ?
 		// make this private is the safest option.

@@ -35,7 +35,6 @@
 		],
 		"no-mixed-spaces-and-tabs": "warn",
 		"prefer-const": "warn",
-		"no-var": "warn",
-		"prefer-arrow-callback": "warn"
+		"no-var": "warn"
 	}
 }

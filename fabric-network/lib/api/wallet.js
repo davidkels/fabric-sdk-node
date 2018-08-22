@@ -46,11 +46,11 @@ class Wallet {
 	}
 
 	async delete(label) {
-		throw new Error('Unimplemented');
+		throw new Error('Not implemented');
 	}
 
 	async exists(label) {
-		throw new Error('Unimplemented');
+		throw new Error('Not implemented');
 	}
 }
 

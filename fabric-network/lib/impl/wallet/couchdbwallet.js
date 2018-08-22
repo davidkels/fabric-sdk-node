@@ -24,8 +24,8 @@ const PREFIX = '$identity_$';
 class CouchDBWallet extends BaseWallet {
 
 	// {url: 'http://localhost:5984'}
-	constructor(options) {
-		super();
+	constructor(options, mixin) {
+		super(mixin);
 		this.options = options;
 		this.couch = Nano(options.url);
 		this.dbOptions = {};
